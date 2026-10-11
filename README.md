@@ -5,13 +5,13 @@
 <h1 align="center">ویرابات · Virabot</h1>
 
 <p align="center">
-  <a href="#fa"><img src="docs/buttons/fa.png" alt="فارسی" height="36"></a>
-  <a href="#en"><img src="docs/buttons/en.png" alt="English" height="36"></a>
+  <a href="#fa"><img src="docs/btn/fa.png" alt="فارسی" height="36"></a>
+  <a href="#en"><img src="docs/btn/en.png" alt="English" height="36"></a>
 </p>
 <p align="center">
-  <a href="https://github.com/silent4time/virabot/blob/main/CHANGELOG.md"><img src="docs/buttons/changelog.png" alt="تغییرات" height="36"></a>
-  <a href="https://github.com/silent4time/virabot/releases/tag/v5.2.0"><img src="docs/buttons/release.png" alt="ریلیز" height="36"></a>
-  <a href="https://github.com/silent4time/virabot/raw/main/docs/virabot-guide.pdf"><img src="docs/buttons/guide.png" alt="راهنمای مصور" height="36"></a>
+  <a href="https://github.com/silent4time/virabot/blob/main/CHANGELOG.md"><img src="docs/btn/log.png" alt="تغییرات" height="36"></a>
+  <a href="https://github.com/silent4time/virabot/releases/tag/v5.2.0"><img src="docs/btn/rel.png" alt="ریلیز" height="36"></a>
+  <a href="https://github.com/silent4time/virabot/raw/main/docs/virabot-guide.pdf"><img src="docs/btn/pdf.png" alt="راهنمای مصور" height="36"></a>
 </p>
 
 ربات فروش و مدیریت اشتراک سرویس‌های شبکه برای تلگرام و بله.
