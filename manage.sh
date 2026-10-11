@@ -1328,14 +1328,33 @@ do_update() {
   echo "$PROJECT_NAME" > "${INSTALL_DIR}/PROJECT_NAME"
 
   pkg="$(dirname "$src_patch")"
-  if [[ -f "$pkg/panel/login.php" ]]; then
-    cp -a "$pkg/panel/." "${INSTALL_DIR}/panel/"
-    ok "  panel design"
+  # Visual package: web panel, mini app and theme travel with every update.
+  panel_src=""
+  for cand in "$pkg/panel" "$pkg/base/panel"; do
+    if [[ -f "$cand/login.php" ]]; then panel_src="$cand"; break; fi
+  done
+  if [[ -n "$panel_src" ]]; then
+    mkdir -p "${INSTALL_DIR}/panel"
+    cp -a "$panel_src/." "${INSTALL_DIR}/panel/"
+    ok "  web panel design"
+  else
+    warn "  web panel design missing from update package"
   fi
-  if [[ -f "$pkg/base/app/virabot.css" ]]; then
-    cp -f "$pkg/base/app/virabot.css" "${INSTALL_DIR}/app/virabot.css"
-    [[ -f "$pkg/base/app/index.php" ]] && cp -f "$pkg/base/app/index.php" "${INSTALL_DIR}/app/index.php"
+  app_src=""
+  for cand in "$pkg/base/app" "$pkg/app"; do
+    if [[ -f "$cand/index.php" || -f "$cand/virabot.css" ]]; then app_src="$cand"; break; fi
+  done
+  if [[ -n "$app_src" ]]; then
+    mkdir -p "${INSTALL_DIR}/app"
+    [[ -f "$app_src/virabot.css" ]] && cp -f "$app_src/virabot.css" "${INSTALL_DIR}/app/virabot.css"
+    [[ -f "$app_src/index.php" ]] && cp -f "$app_src/index.php" "${INSTALL_DIR}/app/index.php"
     ok "  mini app theme"
+  else
+    warn "  mini app theme missing from update package"
+  fi
+  if [[ -f "$pkg/theme/virabot.css" ]]; then
+    mkdir -p "${INSTALL_DIR}/theme"
+    cp -f "$pkg/theme/virabot.css" "${INSTALL_DIR}/theme/virabot.css"
   fi
 
   chown -R www-data:www-data "$INSTALL_DIR" 2>/dev/null || true
