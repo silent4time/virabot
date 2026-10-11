@@ -48,6 +48,7 @@ $tabs = [
     'appearance' => ['icon' => 'settings', 'label' => $textbotlang['panel']['settingsTabAppearance']],
     'security' => ['icon' => 'block', 'label' => $textbotlang['panel']['settingsTabSecurity']],
     'system' => ['icon' => 'dashboard', 'label' => $textbotlang['panel']['settingsTabSystem']],
+    'backup' => ['icon' => 'dashboard', 'label' => 'بکاپ'],
 ];
 
 $pageTitle = $textbotlang['panel']['settingsTitle'];
@@ -254,6 +255,34 @@ include __DIR__ . '/inc/layout_head.php';
                     <span class="kv-val cm" style="font-size:.78rem"><?= htmlspecialchars($value) ?></span>
                 </div>
             <?php endforeach; ?>
+        </div>
+    </div>
+
+<?php elseif ($tab === 'backup'): ?>
+    <div class="card fade-up">
+        <div class="card-head">
+            <div>
+                <div class="card-title">بکاپ دیتابیس</div>
+                <div class="card-subtitle">همان فایل SQL که ربات به گروه بکاپ می‌فرستد</div>
+            </div>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:18px">
+            <div>
+                <a class="btn btn-primary" href="backup.php?action=download&_csrf=<?= urlencode(csrf_token()) ?>">دریافت فایل بکاپ</a>
+            </div>
+            <form method="POST" action="backup.php" enctype="multipart/form-data" style="display:flex;flex-direction:column;gap:12px">
+                <input type="hidden" name="_csrf" value="<?= csrf_token() ?>">
+                <input type="hidden" name="action" value="restore">
+                <div class="field">
+                    <label>بارگذاری فایل بکاپ SQL</label>
+                    <input type="file" name="backup" accept=".sql,application/sql" class="input" required>
+                </div>
+                <label style="display:flex;gap:8px;align-items:center;color:var(--text)">
+                    <input type="checkbox" name="confirm_restore" value="1" required>
+                    می‌دانم این فایل، دیتابیس فعلی را جایگزین می‌کند
+                </label>
+                <button class="btn btn-primary" type="submit">بارگذاری و جایگزینی</button>
+            </form>
         </div>
     </div>
 
