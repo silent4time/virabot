@@ -39,13 +39,13 @@ html,body,button,input,select,textarea{font-family:Vazirmatn,Tahoma,sans-serif !
   --btn-ac-text:#1a160c;--btn-ok-text:#1a160c;--btn-no-text:#1a0505;
   --bg:#12110e;--sf:#1c1a16;--sf2:#17150f;--sf3:#262218;--sfh:#302b1e;
   --bd:#3a3424;--bds:#4a4330;--hl:#2a2618;
-  --ac:#e0c36a;--ach:#edd48a;--acs:rgba(224,195,106,.16);--acg:rgba(224,195,106,.28);
-  --ok:#e0c36a;--oks:rgba(224,195,106,.16);
+  --ac:#f0c43a;--ach:#ffd86a;--acs:rgba(224,195,106,.16);--acg:rgba(224,195,106,.28);
+  --ok:#f0c43a;--oks:rgba(224,195,106,.16);
   --no:#ff8b8b;--nos:rgba(255,139,139,.14);
-  --warn:#e0c36a;--warns:rgba(224,195,106,.14);
+  --warn:#f0c43a;--warns:rgba(224,195,106,.14);
   --text:#f6f3ea;--text2:#e7dfcc;--mute:#cfc4aa;--dim:#b3a78d;--fade:#8d8270;
-  --grad:linear-gradient(135deg,#e0c36a,#c9aa55)
+  --grad:linear-gradient(135deg,#f0c43a,#d4a72a)
 }
-[data-theme=vira] .btn-primary,[data-theme=vira] button.btn{background:#e0c36a !important;color:#1a160c !important;border-color:#e0c36a !important}
-[data-theme=vira] a,[data-theme=vira] .nav-item.active{color:#e0c36a}
-[data-theme=vira] .brand-mark{background:#e0c36a;color:#1a160c}
+[data-theme=vira] .btn-primary,[data-theme=vira] button.btn{background:#f0c43a !important;color:#1a160c !important;border-color:#f0c43a !important}
+[data-theme=vira] a,[data-theme=vira] .nav-item.active{color:#f0c43a}
+[data-theme=vira] .brand-mark{background:#f0c43a;color:#1a160c}
