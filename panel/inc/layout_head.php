@@ -17,7 +17,7 @@ $initials = mb_strtoupper(mb_substr($currentUser, 0, 1, 'UTF-8'), 'UTF-8');
   <meta name="apple-mobile-web-app-capable" content="yes">
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title><?= $textbotlang['panel']['layoutBrandName'] ?></title>
-  <link rel="stylesheet" href="css/style.css?v=20261011">
+  <link rel="stylesheet" href="css/style.css?v=20261011b">
   <link rel="stylesheet" href="css/virabot.css">
   <script>
     (function () {
