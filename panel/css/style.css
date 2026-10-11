@@ -22,3 +22,17 @@ html,body,button,input,select,textarea{font-family:Vazirmatn,Tahoma,sans-serif !
 [data-theme=carunit] .auth-mark img{width:min(540px,86%);margin:18vh auto 0;background:transparent}
 [data-theme=carunit] .auth-foot{color:#f5c518}
 [data-theme=carunit] .brand-line{color:#d8d8d8 !important;font-size:34px;font-weight:800}
+
+/* Virabot login: glowing black and gold, matching the approved screenshot */
+[data-theme=carunit] body,[data-theme=carunit] .auth{background:#0b0b0b !important;color:#f3f1ea}
+[data-theme=carunit] .auth-aside{
+  background:
+    radial-gradient(ellipse at 50% 48%, rgba(245,197,24,.42) 0%, rgba(245,197,24,.16) 22%, transparent 48%),
+    radial-gradient(circle, rgba(245,197,24,.28) 1px, transparent 1.3px) 0 0 / 16px 16px,
+    #101010 !important;
+}
+[data-theme=carunit] .auth-main{background:#0b0b0b !important}
+[data-theme=carunit] .auth-box h1,[data-theme=carunit] .brand-line{color:#dedede !important}
+[data-theme=carunit] .input{background:#161616 !important;border:1px solid #3a3420 !important;color:#f7f4ea !important}
+[data-theme=carunit] .btn-primary,[data-theme=carunit] button.btn{background:#f5c518 !important;color:#111 !important;border-color:#f5c518 !important}
+[data-theme=carunit] .auth-foot,[data-theme=carunit] .auth-foot a{color:#f5c518 !important}
