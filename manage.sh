@@ -1327,6 +1327,17 @@ do_update() {
   fi
   echo "$PROJECT_NAME" > "${INSTALL_DIR}/PROJECT_NAME"
 
+  pkg="$(dirname "$src_patch")"
+  if [[ -f "$pkg/panel/login.php" ]]; then
+    cp -a "$pkg/panel/." "${INSTALL_DIR}/panel/"
+    ok "  panel design"
+  fi
+  if [[ -f "$pkg/base/app/virabot.css" ]]; then
+    cp -f "$pkg/base/app/virabot.css" "${INSTALL_DIR}/app/virabot.css"
+    [[ -f "$pkg/base/app/index.php" ]] && cp -f "$pkg/base/app/index.php" "${INSTALL_DIR}/app/index.php"
+    ok "  mini app theme"
+  fi
+
   chown -R www-data:www-data "$INSTALL_DIR" 2>/dev/null || true
 
   # Ensure license_client present + seed key from config into PaySetting
