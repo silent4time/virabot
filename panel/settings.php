@@ -268,9 +268,9 @@ include __DIR__ . '/inc/layout_head.php';
         </div>
         <div class="card-body" style="display:flex;flex-direction:column;gap:18px">
             <div>
-                <a class="btn btn-primary" href="backup.php?action=download&_csrf=<?= urlencode(csrf_token()) ?>">دریافت فایل بکاپ</a>
+                <a class="btn btn-primary" style="width:auto;align-self:flex-start" href="backup.php?action=download&_csrf=<?= urlencode(csrf_token()) ?>">دریافت فایل بکاپ</a>
             </div>
-            <form method="POST" action="backup.php" enctype="multipart/form-data" style="display:flex;flex-direction:column;gap:12px">
+            <form method="POST" action="backup.php" enctype="multipart/form-data" style="display:flex;flex-direction:column;align-items:flex-start;gap:12px;max-width:420px">
                 <input type="hidden" name="_csrf" value="<?= csrf_token() ?>">
                 <input type="hidden" name="action" value="restore">
                 <div class="field">
@@ -281,7 +281,7 @@ include __DIR__ . '/inc/layout_head.php';
                     <input type="checkbox" name="confirm_restore" value="1" required>
                     می‌دانم این فایل، دیتابیس فعلی را جایگزین می‌کند
                 </label>
-                <button class="btn btn-primary" type="submit">بارگذاری و جایگزینی</button>
+                <button class="btn btn-primary" type="submit" style="width:auto">بارگذاری و جایگزینی</button>
             </form>
         </div>
     </div>
