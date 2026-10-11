@@ -124,7 +124,7 @@ document.querySelectorAll('[data-confirm]').forEach(function (el) {
 });
 
 var _THEME_BG = {
-    navy: '#0F172A', purple: '#180D2E', emerald: '#0A1F1C',
+    navy: '#0F172A', vira: '#12110e', purple: '#180D2E', emerald: '#0A1F1C',
     sunset: '#1A0D0D', slate: '#080808', light: '#F1F5F9',
     linen: '#FAF7F2', mint: '#F0FDF4', lavender: '#FAF5FF'
 };

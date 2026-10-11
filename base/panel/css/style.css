@@ -34,3 +34,18 @@ html,body,button,input,select,textarea{font-family:Vazirmatn,Tahoma,sans-serif !
 [data-theme=carunit] .input{background:#161616 !important;border:1px solid #3a3420 !important;color:#f7f4ea !important}
 [data-theme=carunit] .btn-primary,[data-theme=carunit] button.btn{background:#f5c518 !important;color:#111 !important;border-color:#f5c518 !important}
 [data-theme=carunit] .auth-foot,[data-theme=carunit] .auth-foot a{color:#f5c518 !important}
+
+[data-theme=vira]{
+  --btn-ac-text:#1a160c;--btn-ok-text:#1a160c;--btn-no-text:#1a0505;
+  --bg:#12110e;--sf:#1c1a16;--sf2:#17150f;--sf3:#262218;--sfh:#302b1e;
+  --bd:#3a3424;--bds:#4a4330;--hl:#2a2618;
+  --ac:#e0c36a;--ach:#edd48a;--acs:rgba(224,195,106,.16);--acg:rgba(224,195,106,.28);
+  --ok:#e0c36a;--oks:rgba(224,195,106,.16);
+  --no:#ff8b8b;--nos:rgba(255,139,139,.14);
+  --warn:#e0c36a;--warns:rgba(224,195,106,.14);
+  --text:#f6f3ea;--text2:#e7dfcc;--mute:#cfc4aa;--dim:#b3a78d;--fade:#8d8270;
+  --grad:linear-gradient(135deg,#e0c36a,#c9aa55)
+}
+[data-theme=vira] .btn-primary,[data-theme=vira] button.btn{background:#e0c36a !important;color:#1a160c !important;border-color:#e0c36a !important}
+[data-theme=vira] a,[data-theme=vira] .nav-item.active{color:#e0c36a}
+[data-theme=vira] .brand-mark{background:#e0c36a;color:#1a160c}
