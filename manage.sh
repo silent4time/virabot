@@ -1,6 +1,6 @@
 #!/usr/bin/env bash
 # ============================================================================
-#  SilentSell (سایلنت‌سل) — پنل مدیریت نصب
+#  Virabot (ویرابات) — پنل مدیریت نصب
 #  نسخه: با فایل VERSION هم‌خوان است
 #
 #  اجرا:
@@ -473,7 +473,7 @@ show_banner() {
   cat << EOF
 +==========================================================+
 |                                                          |
-|             SilentSell  -  Management Panel              |
+|              Virabot  -  Management Panel                |
 |                   Telegram  +  Bale                      |
 |                                                          |
 +==========================================================+
@@ -482,7 +482,7 @@ EOF
   echo -e "  Version : ${BOLD}v${ver}${NC}"
   show_instances_banner_line
   if has_legacy; then
-    warn "Old mirza_vali Pro install found — option 10 moves it to SilentSell."
+    warn "Old install found — option 10 moves it to Virabot."
   fi
   echo ""
 }
@@ -490,9 +490,9 @@ EOF
 show_menu() {
   echo -e "${BOLD}  Main Menu:${NC}"
   echo "  -------------------------------------"
-  echo "   1)  Install SilentSell (new instance OK)"
-  echo "   2)  Update SilentSell"
-  echo "   3)  Remove SilentSell"
+  echo "   1)  Install Virabot (new instance OK)"
+  echo "   2)  Update Virabot"
+  echo "   3)  Remove Virabot"
   echo "   4)  Reset (webhooks / tunnel / domain)"
   echo "   5)  Renew SSL certificate"
   echo "   6)  Help & Parameters"
@@ -500,7 +500,7 @@ show_menu() {
   echo "   8)  Configure bots & groups (Telegram / Bale)"
   echo "   9)  List instances (multi-install)"
   if has_legacy; then
-    echo "  10)  Move old mirza_vali Pro install to SilentSell"
+    echo "  10)  Move old install to Virabot"
   fi
   echo "   0)  Exit"
   echo "  -------------------------------------"
@@ -512,7 +512,7 @@ show_menu() {
 # ===========================================================================
 do_install() {
   echo ""
-  echo -e "${BOLD}=== Install SilentSell ===${NC}"
+  echo -e "${BOLD}=== Install Virabot ===${NC}"
   echo ""
 
   if [[ "$HAS_LOCAL_PATCH" != "true" ]]; then
@@ -645,11 +645,19 @@ do_install() {
     mv "$INSTALL_DIR" "${INSTALL_DIR}-backup-$(date +%Y%m%d%H%M%S)"
   fi
   mkdir -p "$(dirname "$INSTALL_DIR")"
-  info "Downloading base mirzabot source from GitHub..."
-  git clone --quiet https://github.com/mahdiMGF2/mirzabot.git "$INSTALL_DIR"
-  PATCH_BASE_COMMIT="fcd9afeb0e80b67db21cc21611dc91a07c0feee0"
-  (cd "$INSTALL_DIR" && git checkout --quiet "$PATCH_BASE_COMMIT") || warn "Could not checkout pinned commit"
-  ok "Base source ready."
+  info "Installing Virabot source..."
+  base=""
+  for cand in "${SCRIPT_DIR}/base" "/opt/${PROJECT_NAME}-src/base"; do
+    if [[ -f "$cand/botapi.php" && -f "$cand/table.php" ]]; then base="$cand"; break; fi
+  done
+  if [[ -z "$base" ]]; then
+    err "Virabot source bundle is missing."
+    err "Re-run: curl -fsSL https://raw.githubusercontent.com/silent4time/${PROJECT_NAME}/main/install.sh | sudo bash"
+    exit 1
+  fi
+  mkdir -p "$INSTALL_DIR"
+  cp -a "$base"/. "$INSTALL_DIR/"
+  ok "Virabot source ready."
 
   if [[ -f "$INSTALL_DIR/composer.json" && ! -d "$INSTALL_DIR/vendor" ]]; then
     info "Installing Composer dependencies..."
@@ -657,7 +665,7 @@ do_install() {
   fi
 
   # --- اعمال پچ ---
-  info "Applying SilentSell patch..."
+  info "Applying Virabot files..."
   apply_patch_files "$INSTALL_DIR"
   write_config "$INSTALL_DIR"
   echo "$(version_of "$SCRIPT_DIR")" > "$INSTALL_DIR/VERSION"
@@ -719,13 +727,13 @@ do_install() {
   info "Dedicated Apache port for this instance: ${MIRZA_HTTP_PORT} (site: ${APACHE_SITE})"
   # Listen on a dedicated port so other Apache bots / other instances are not disturbed
   cat > "/etc/apache2/conf-available/${APACHE_SITE}-port.conf" <<EOF
-# SilentSell instance ${INSTANCE_ID} dedicated port
+# Virabot instance ${INSTANCE_ID} dedicated port
 Listen ${MIRZA_HTTP_PORT}
 EOF
   a2enconf "${APACHE_SITE}-port" >/dev/null 2>&1 || true
 
   cat > "/etc/apache2/sites-available/${APACHE_SITE}.conf" <<EOF
-# SilentSell — isolated from other Apache bots via dedicated port ${MIRZA_HTTP_PORT}
+# Virabot — isolated Apache port ${MIRZA_HTTP_PORT}
 <VirtualHost *:${MIRZA_HTTP_PORT}>
     ServerAdmin webmaster@localhost
     DocumentRoot ${INSTALL_DIR}
@@ -1152,7 +1160,7 @@ register_webhooks() {
 do_update() {
   echo ""
   if has_legacy; then
-    info "Old mirza_vali Pro install found — moving it to SilentSell first."
+    info "Old install found — moving it to Virabot first."
     do_migrate
     if has_legacy; then
       err "Move did not finish; update cancelled."
@@ -1161,7 +1169,7 @@ do_update() {
   fi
   if ! select_instance "update"; then return 1; fi
   apply_instance_identity
-  echo -e "${BOLD}=== Update SilentSell (latest) ===${NC}"
+  echo -e "${BOLD}=== Update Virabot (latest) ===${NC}"
   echo ""
   load_state
 
@@ -1374,7 +1382,7 @@ do_reset() {
   echo ""
   if ! select_instance "reset"; then return 1; fi
   apply_instance_identity
-  echo -e "${BOLD}=== Reset SilentSell ===${NC}"
+  echo -e "${BOLD}=== Reset Virabot ===${NC}"
   echo ""
   load_state
 
@@ -1446,7 +1454,7 @@ do_remove() {
   echo ""
   if ! select_instance "remove"; then return 1; fi
   apply_instance_identity
-  echo -e "${BOLD}${RED}=== Full remove SilentSell ===${NC}"
+  echo -e "${BOLD}${RED}=== Full remove Virabot ===${NC}"
   echo ""
   load_state
 
@@ -1683,9 +1691,9 @@ do_help() {
   echo "    curl -fsSL https://raw.githubusercontent.com/silent4time/${PROJECT_NAME}/main/install.sh | sudo bash"
   echo ""
   echo "  CLI commands:  sudo ${PROJECT_NAME} <command>"
-  echo "    install   — Install SilentSell"
+  echo "    install   — Install Virabot"
   echo "    update    — Update from GitHub zip"
-  echo "    migrate   — Move an old mirza_vali Pro install (add --dry-run to only show the plan)"
+  echo "    migrate   — Move an old install (add --dry-run to only show the plan)"
   echo "    remove    — Full uninstall"
   echo "    reset     — Webhooks / tunnel / domain tools"
   echo "    renew     — Renew SSL certificate"
@@ -1703,7 +1711,7 @@ do_help() {
   echo "    - Dual platform: Telegram + Bale"
   echo "    - Uses Apache (not Nginx) to avoid conflict with other bots"
   echo "    - Database tables are verified during install"
-  echo "    - Official Mirza 'Free→Pro migrate' is NOT applicable here"
+  echo "    - A free-to-pro migrate is not used here"
   echo ""
 }
 
@@ -1786,7 +1794,7 @@ do_status() {
 }
 
 # ===========================================================================
-#  Move an old mirza_vali Pro install to SilentSell (same domain, DB, bots)
+#  Move an old install to Virabot (same domain, DB, bots)
 # ===========================================================================
 install_command() {
   local src="/opt/${PROJECT_NAME}-src/manage.sh"
@@ -1987,7 +1995,7 @@ do_migrate() {
   local dry="false"
   [[ "${1:-}" == "--dry-run" || "${1:-}" == "-n" ]] && dry="true"
   echo ""
-  echo -e "${BOLD}=== Move mirza_vali Pro -> SilentSell ===${NC}"
+  echo -e "${BOLD}=== Move old install -> Virabot ===${NC}"
   local envs=() e rc
   mapfile -t envs < <(legacy_instances)
   if [[ ${#envs[@]} -eq 0 ]]; then

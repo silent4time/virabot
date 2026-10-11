@@ -125,7 +125,6 @@ mkdir -p "$SRC_DIR"
 cp -a "$FOUND"/. "$SRC_DIR/"
 chmod +x "$SRC_DIR/manage.sh" "$SRC_DIR/install.sh" 2>/dev/null || true
 ln -sf "$SRC_DIR/manage.sh" /usr/local/bin/virabot
-ln -sf "$SRC_DIR/manage.sh" /usr/local/bin/silentsell
 rm -rf "$WORK"
 
 echo "[*] Source OK — command: sudo virabot"
