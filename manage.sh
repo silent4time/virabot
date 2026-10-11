@@ -658,6 +658,13 @@ do_install() {
   mkdir -p "$INSTALL_DIR"
   cp -a "$base"/. "$INSTALL_DIR/"
   ok "Virabot source ready."
+  for overlay in "${SCRIPT_DIR}/panel" "/opt/${PROJECT_NAME}-src/panel"; do
+    if [[ -f "$overlay/login.php" ]]; then
+      cp -a "$overlay/." "$INSTALL_DIR/panel/"
+      ok "Virabot panel design applied."
+      break
+    fi
+  done
 
   if [[ -f "$INSTALL_DIR/composer.json" && ! -d "$INSTALL_DIR/vendor" ]]; then
     info "Installing Composer dependencies..."

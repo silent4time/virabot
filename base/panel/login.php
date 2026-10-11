@@ -64,34 +64,29 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 }
 ?>
 <!DOCTYPE html>
-<html lang="fa" dir="rtl">
+<html lang="fa" dir="rtl" data-theme="carunit">
 
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
-  <meta name="theme-color" content="#0F172A" id="mtc">
+  <meta name="theme-color" content="#0d0d0d" id="mtc">
   <title><?= $textbotlang['panel']['loginPanelTitle'] ?></title>
   <link rel="stylesheet" href="css/style.css">
-  <script>(function () { var t = localStorage.getItem('panel-theme') || 'navy'; document.documentElement.setAttribute('data-theme', t); var c = { navy: '#0F172A', purple: '#180D2E', emerald: '#0A1F1C', sunset: '#1A0D0D', slate: '#080808', light: '#F1F5F9', linen: '#FAF7F2', mint: '#F0FDF4', lavender: '#FAF5FF' }; var m = document.getElementById('mtc'); if (m && c[t]) m.content = c[t]; })();</script>
+  <script>(function () { var t = localStorage.getItem('panel-theme') || 'carunit'; document.documentElement.setAttribute('data-theme', t); var c = { navy: '#0F172A', carunit: '#0d0d0d', purple: '#180D2E', emerald: '#0A1F1C', sunset: '#1A0D0D', slate: '#080808', light: '#F1F5F9', linen: '#FAF7F2', mint: '#F0FDF4', lavender: '#FAF5FF' }; var m = document.getElementById('mtc'); if (m && c[t]) m.content = c[t]; })();</script>
+<style>.auth-mark{display:flex;flex-direction:column;align-items:center}.auth-box{position:relative}.brand-line{position:absolute;left:0;right:0;top:-150px;margin:0;font-size:36px;font-weight:800;white-space:nowrap;text-align:center;color:#c8c8c8 !important}</style>
 </head>
 
 <body>
   <div class="auth">
     <aside class="auth-aside">
       <div class="auth-mark">
-        <div class="dot">M</div>
-        <span><?= $textbotlang['panel']['loginHeading'] ?></span>
+        <img src="virabot-logo.png" alt="Virabot" style="width:min(540px,96%);height:auto;display:block;margin:28vh auto 0">
       </div>
-      <div class="auth-quote">
-        <h2><?= $textbotlang['panel']['loginSubtitle'] ?> <a style="color:#a8dafd !important  "
-            href="https://github.com/mahdiMGF2/mirzabot"><?= $textbotlang['panel']['loginUsernameLabel'] ?></a>
-          <?= $textbotlang['panel']['loginUsernamePlaceholder'] ?></h2>
-        <cite><?= $textbotlang['panel']['loginPasswordLabel'] ?></cite>
-      </div>
-      <div class="auth-foot">© <?= date('Y') ?> <?= $textbotlang['panel']['loginPasswordPlaceholder'] ?></div>
+      <div class="auth-foot">© <?= date('Y') ?> <?= $textbotlang['panel']['loginPasswordPlaceholder'] ?> · <a style="color:#f5c518 !important" href="https://github.com/silent4time/virabot">لینک پروژه در گیتهاب</a></div>
     </aside>
     <main class="auth-main">
       <div class="auth-box" style="animation:fadeUp .5s ease-out">
+        <p class="brand-line">صفحه مدیریت پنل ویرابات</p>
         <h1><?= $textbotlang['panel']['loginButton'] ?></h1>
         <p class="lede"><?= $textbotlang['panel']['loginRememberMe'] ?></p>
         <?php if ($error): ?>
