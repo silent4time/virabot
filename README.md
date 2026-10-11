@@ -10,7 +10,8 @@
 </p>
 
 
-ربات فروش و مدیریت اشتراک سرویس‌های شبکه برای تلگرام و بله.
+<h3 align="center"><b>ربات فروش و مدیریت اشتراک سرویس‌های شبکه برای تلگرام و بله</b></h3>
+<p align="center">A bot for selling and managing network-service subscriptions on Telegram and Bale.</p>
 
 ---
 
