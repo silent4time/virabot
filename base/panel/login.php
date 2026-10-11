@@ -71,7 +71,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
   <meta name="viewport" content="width=device-width,initial-scale=1,maximum-scale=1">
   <meta name="theme-color" content="#0d0d0d" id="mtc">
   <title>ورود — ویرابات</title>
-  <link rel="stylesheet" href="css/style.css?v=20261011">
+  <link rel="stylesheet" href="css/style.css?v=20261011b">
   <link rel="stylesheet" href="css/virabot.css">
   <script>(function () { var t = localStorage.getItem('panel-theme') || 'carunit'; document.documentElement.setAttribute('data-theme', t); var c = { navy: '#0F172A', carunit: '#0d0d0d', purple: '#180D2E', emerald: '#0A1F1C', sunset: '#1A0D0D', slate: '#080808', light: '#F1F5F9', linen: '#FAF7F2', mint: '#F0FDF4', lavender: '#FAF5FF' }; var m = document.getElementById('mtc'); if (m && c[t]) m.content = c[t]; })();</script>
 <style>.auth-mark{display:flex;flex-direction:column;align-items:center}.auth-box{position:relative}.brand-line{position:absolute;left:0;right:0;top:-150px;margin:0;font-size:36px;font-weight:800;white-space:nowrap;text-align:center;color:#c8c8c8 !important}</style>

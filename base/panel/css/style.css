@@ -75,3 +75,14 @@ html,body{overflow-x:hidden}
   .tbl-wrap{display:block;overflow-x:auto;max-width:100%}
   .tbl-sm{min-width:460px}
 }
+
+@media (max-width:1024px){
+  .auth{display:flex;flex-direction:column;min-height:100vh}
+  .auth-aside{display:contents !important}
+  .auth-mark{order:1;min-height:32vh;display:flex;align-items:center;justify-content:center;padding-top:18px}
+  .auth-mark img{width:min(280px,78%) !important;margin:0 auto !important}
+  .auth-main{order:2;display:flex;align-items:flex-start;justify-content:center;padding:8px 16px 16px}
+  .auth-box{width:min(380px,100%)}
+  .brand-line{position:static !important;top:auto !important;margin:0 0 14px !important;font-size:20px !important;white-space:normal !important;line-height:1.45}
+  .auth-foot{order:3;margin-top:auto;text-align:center;padding:18px 12px 22px}
+}
