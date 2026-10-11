@@ -12,3 +12,13 @@ html,body,button,input,select,textarea{font-family:Vazirmatn,Tahoma,sans-serif !
 
 .auth-mark{display:flex;flex-direction:column;align-items:center;text-align:center}
 .auth-mark h2{white-space:nowrap}
+
+[data-theme=carunit] .auth-aside{
+  background:
+    radial-gradient(circle at 50% 42%, rgba(245,197,24,.28), transparent 34%),
+    radial-gradient(circle, rgba(255,255,255,.16) 1px, transparent 1.2px) 0 0 / 18px 18px,
+    #141414 !important;
+}
+[data-theme=carunit] .auth-mark img{width:min(540px,86%);margin:18vh auto 0;background:transparent}
+[data-theme=carunit] .auth-foot{color:#f5c518}
+[data-theme=carunit] .brand-line{color:#d8d8d8 !important;font-size:34px;font-weight:800}
