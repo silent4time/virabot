@@ -16,7 +16,6 @@ html,body,button,input,select,textarea{font-family:Vazirmatn,Tahoma,sans-serif !
 [data-theme=carunit] .auth-aside{
   background:
     radial-gradient(circle at 50% 42%, rgba(245,197,24,.28), transparent 34%),
-    radial-gradient(circle, rgba(255,255,255,.16) 1px, transparent 1.2px) 0 0 / 18px 18px,
     #141414 !important;
 }
 [data-theme=carunit] .auth-mark img{width:min(540px,86%);margin:18vh auto 0;background:transparent}
@@ -28,7 +27,6 @@ html,body,button,input,select,textarea{font-family:Vazirmatn,Tahoma,sans-serif !
 [data-theme=carunit] .auth-aside{
   background:
     radial-gradient(ellipse at 50% 48%, rgba(245,197,24,.42) 0%, rgba(245,197,24,.16) 22%, transparent 48%),
-    radial-gradient(circle, rgba(245,197,24,.28) 1px, transparent 1.3px) 0 0 / 16px 16px,
     #101010 !important;
 }
 [data-theme=carunit] .auth-main{background:#0b0b0b !important}
