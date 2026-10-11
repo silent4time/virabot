@@ -1,94 +1,178 @@
-# ویرابات (Virabot)
+<p align="center">
+  <img src="panel/virabot-logo.png" alt="Virabot" width="420">
+</p>
 
-ربات فروش و مدیریت اشتراک سرویس‌های شبکه برای **تلگرام** و **بله**.
+<h1 align="center">ویرابات · Virabot</h1>
 
-**نسخه:** 5.2.0 — [تغییرات](CHANGELOG.md) · [آخرین ریلیز](https://github.com/silent4time/virabot/releases/tag/v5.2.0)
+<p align="center">
+  <a href="#فارسی">فارسی</a> · <a href="#english">English</a><br>
+  <b>نسخه ۵.۲.۰</b> · <a href="CHANGELOG.md">تغییرات</a> · <a href="https://github.com/silent4time/virabot/releases/tag/v5.2.0">ریلیز</a> · <a href="docs/virabot-guide.pdf">راهنمای مصور</a>
+</p>
 
-[راهنمای مصور نصب، صفحه وب و مینی‌اپ](docs/virabot-guide.pdf)
+ربات فروش و مدیریت اشتراک سرویس‌های شبکه برای تلگرام و بله.
 
 ---
 
-## نصب
+# فارسی
 
-روی سرور اوبونتو:
+## معرفی
+
+ویرابات یک ربات کامل برای فروش اشتراک سرویس‌های شبکه است که همزمان روی تلگرام و پیام‌رسان بله کار می‌کند. خرید، پرداخت، تحویل خودکار سرویس، کیف پول و پنل مدیریت در یک سیستم است.
+
+این پروژه بر پایه ربات متن‌باز میرزا توسعه یافته است. تشکر از سازنده اصلی: [mahdiMGF2/mirzabot](https://github.com/mahdiMGF2/mirzabot)
+
+## مقایسه با ربات‌های مشابه
+
+| موضوع | ربات‌های مشابه | ویرابات |
+|--------|----------------|---------|
+| معماری | بازنویسی جدید | نسل قبلی + سفارشی‌سازی |
+| تلگرام | بله | بله |
+| بله و بله‌پی | خیر | بله |
+| کارت‌به‌کارت و کیف پول | محدود | پایدار و تست‌شده |
+| پنل ایلان | خیر | کامل |
+| پنل کانکتیکس | خیر | کامل |
+| بکاپ زمان‌بندی‌شده | محدود | دستی، بازه و ساعت شروع |
+| منطقه زمانی | — | قابل انتخاب |
+| تعرفه و کاربر همزمان | — | بله |
+
+## امکانات اصلی
+
+| قابلیت | توضیح |
+|--------|--------|
+| تلگرام + بله | یک دیتابیس؛ پیام و وب‌هوک جدا |
+| فروش خودکار | محصول، پرداخت، ساخت سرویس و ارسال کانفیگ |
+| کیف پول | شارژ و خرید از موجودی |
+| پنل‌های متعدد | پنل‌های رایج مدیریت سرویس |
+| مدیریت ادمین | محصولات، کاربران، پرداخت‌ها، آمار و بکاپ |
+| Apache + SSL | نصب روی Apache با گواهی |
+| منوی سرور | نصب، آپدیت، حذف، ریست و تمدید SSL |
+
+## امکانات اضافه‌شده
+
+| امکان | توضیح |
+|--------|--------|
+| تلگرام + بله یکپارچه | وب‌هوک جدا؛ دیتابیس مشترک؛ گزارش به هر دو گروه |
+| بله‌پی از تلگرام | هدایت کاربر تلگرام به ربات بله برای پرداخت |
+| کارت‌به‌کارت پایدار | فاکتور، کارت، رسید و تأیید ادمین |
+| پنل ایلان | جداسازی پروتکل با inboundid |
+| کاربر همزمان محصول | تعداد کاربر همزمان؛ صفر یعنی نامحدود |
+| تعرفه اشتراک‌ها | حجم، زمان، کاربر و قیمت؛ مرتب بر اساس قیمت |
+| بکاپ دستی | SQL فوری به گروه تلگرام و بله |
+| زمان‌بندی بکاپ | فاصله ساعتی و ساعت شروع |
+| منطقه زمانی | انتخاب از پنل؛ پیش‌فرض تهران؛ تاریخ شمسی |
+| گروه گزارش بله | آیدی گروه بله جدا از تلگرام |
+| صفحه وب و مینی‌اپ | داشبورد وب، تب بکاپ، فروشگاه تلگرام |
+
+## کد فعال‌سازی
+
+نسخه رایگان تا **۲۰ کاربر** در همه پنل‌ها کار می‌کند. بعد از آن ساخت کاربر جدید متوقف می‌شود. برای استفاده کامل باید کد فعال‌سازی بخرید.
+
+برای خرید یا تمدید به تلگرام **@silentpingvpn** پیام دهید: [t.me/silentpingvpn](https://t.me/silentpingvpn)
+
+### ثبت کلید
+
+1. در ربات وارد منوی مدیریت شوید.
+2. **لایسنس ربات** و بعد **ثبت / ویرایش کلید لایسنس** را بزنید و کلید را بفرستید.
+3. برای دیدن وضعیت، این دستور را بفرستید:
+
+```text
+/license
+```
+
+کلید فقط روی دامنه‌ای کار می‌کند که برایش صادر شده است.
+
+## روش‌های پرداخت
+
+- **بله‌پی:** پرداخت آنلاین داخل بله؛ از تلگرام با راهنمایی به ربات بله
+- **کارت‌به‌کارت:** نمایش کارت، دریافت رسید و تأیید ادمین
+- **کیف پول:** خرید از موجودی کاربر
+
+## پنل‌های پشتیبانی‌شده
+
+| نوع پنل | شناسه |
+|---------|--------|
+| Marzban | `marzban` |
+| Marzneshin | `marzneshin` |
+| پاسارگاد | `pasarguard` |
+| اتصال به ربات نماینده دیگر | `mirza_agent` |
+| سنایی | `x-ui_single` |
+| علیرضا | `alireza_single` |
+| Hiddify | `hiddify` |
+| فروش دستی | `Manualsale` |
+| WGDashboard | `WGDashboard` |
+| s-UI | `s_ui` |
+| IBSng | `ibsng` |
+| MikroTik | `mikrotik` |
+| Rebecca | `rebecca` |
+| Eylan | `eylan` |
+| Connectix | `connectix` |
+
+افزودن پنل: منوی مدیریت، مدیریت پنل‌ها، افزودن پنل.
+
+## پنل کانکتیکس
+
+سایت فروشنده: [seller.connectix.vip](https://seller.connectix.vip)
+
+- نوع پنل: **Connectix**
+- آدرس API: `https://seller-api.connectix.vip/externel/v1`
+- رمز پنل همان API Token است
+- بعد از ذخیره، پلن‌های فعال به‌صورت محصول ساخته می‌شوند
+- پلن‌هایی که در عنوانشان free است، پلن تست‌اند و به دکمه اکانت تست وصل می‌شوند
+
+| کار | درخواست |
+|-----|---------|
+| ساخت کاربر | `POST /clients/store` و بعد `GET /clients/show?id=` |
+| اطلاعات و مصرف | `GET /clients/show?id=` |
+| پیدا کردن شناسه | `GET /clients?username=` |
+| تمدید | `POST /clients/add-plan` |
+
+هر add-plan موفق یک خرید واقعی است و ربات آن را تکرار نمی‌کند. املای مسیر `externel` است، نه external.
+
+## چند نصب روی یک سرور
+
+| باید جدا باشد | مثال |
+|---------------|------|
+| مسیر | `/home/virabot` و `/home/virabot2` |
+| دامنه | `bot1.example.com` و `bot2.example.com` |
+| دیتابیس | نام و یوزر جدا |
+| توکن | توکن جدا برای هر ربات |
+
+هر نمونه فایل تنظیم جدا در `/etc/virabot/instances` دارد. اگر چند نصب باشد، آپدیت و حذف می‌پرسد کدام را انتخاب کنید.
+
+## مسیر نصب
+
+| مورد | مسیر |
+|------|------|
+| پوشه ربات | `/home/virabot` |
+| منوی مدیریت | `/opt/virabot-src` |
+| تنظیمات | `/etc/virabot/instances/<id>.env` |
+| بکاپ | `/root/virabot-backups` |
+| فرمان | `sudo virabot` |
+
+## نصب
 
 ```bash
 curl -fsSL https://raw.githubusercontent.com/silent4time/virabot/main/install.sh | sudo bash
 ```
 
-از منو گزینه **1) Install** را بزنید. دامنه، توکن تلگرام، توکن بله و اطلاعات دیتابیس پرسیده می‌شود. مسیر نصب پیش‌فرض `/home/virabot` است.
+از منو گزینه **1) Install** را بزنید. دامنه، توکن تلگرام، توکن بله و اطلاعات دیتابیس پرسیده می‌شود.
 
-## به‌روزرسانی
+## آپدیت
 
 ```bash
 sudo virabot update
 ```
 
-یا همان دستور نصب را دوباره بزنید و گزینه **2) Update** را انتخاب کنید. قبل از آپدیت، از فایل‌های اصلی در `/root/virabot-backups` بکاپ گرفته می‌شود. آپدیت فایل‌های فنی، طرح صفحه وب و تم مینی‌اپ را با هم می‌آورد.
+یا از منو گزینه **2) Update**. قبل از آپدیت از فایل‌های اصلی بکاپ گرفته می‌شود.
 
----
-
-## تازه‌های ۵.۲.۰
-
-- تب **بکاپ** در تنظیمات صفحه وب
-- دریافت فایل SQL با همان فرمت بکاپ ربات، و بارگذاری همان فایل برای جایگزینی دیتابیس
-- تم انتخابی **ویرا**
-- صفحه ورود موبایل و تبلت: لوگو بالا، فرم وسط، کپی‌رایت پایین
-- خروج، نشست را کامل پاک می‌کند
-
----
-
-## امکانات
-
-| قابلیت | توضیح |
-|--------|--------|
-| تلگرام + بله | یک دیتابیس؛ وب‌هوک و پیام جدا |
-| فروش خودکار | محصول، پرداخت، ساخت سرویس و ارسال کانفیگ |
-| کیف پول | شارژ و خرید از موجودی |
-| پنل‌ها | کانکتیکس، ایلان و پنل‌های رایج |
-| صفحه وب | داشبورد، کاربران، سفارش‌ها، تنظیمات و بکاپ |
-| مینی‌اپ | فروشگاه داخل تلگرام: دسته، سرویس، محصول |
-| بکاپ | دستی، زمان‌بندی‌شده، و از صفحه وب |
-| SSL | نصب روی Apache با گواهی |
-
-این پروژه بر پایه ربات متن‌باز میرزا توسعه یافته است. تشکر از سازنده اصلی: [mahdiMGF2/mirzabot](https://github.com/mahdiMGF2/mirzabot)
-
----
-
-## صفحه وب
-
-نشانی: `https://دامنه-شما/panel/login.php`
-
-- ورود مدیر با نام کاربری و رمز پنل
-- داشبورد کاربران، سفارش‌ها و درآمد
-- تنظیمات ظاهر، امنیت و سیستم
-- تم **ویرا** از بخش ترکیب رنگ انتخاب می‌شود
-
-### تب بکاپ
-
-در **تنظیمات → بکاپ**:
-
-- **دریافت فایل بکاپ:** فایل `backup_تاریخ.sql` ساخته می‌شود. همان فرمتی است که ربات به گروه بکاپ می‌فرستد.
-- **بارگذاری و جایگزینی:** فقط فایل `.sql` بکاپ پذیرفته می‌شود. با تأیید جدا، دیتابیس فعلی جایگزین می‌شود.
-
-فقط مدیر واردشده به این بخش دسترسی دارد. قبل از جایگزینی یک بکاپ تازه بگیرید.
-
-## مینی‌اپ
-
-فروشگاه داخل تلگرام است. مسیر خرید: اول دسته‌بندی، بعد سرویس، بعد محصول. اگر صفحه قدیمی بود، تلگرام را یک بار ببندید و دوباره باز کنید.
-
----
-
-## منوی سرور
-
-فرمان: `sudo virabot`
+## منوی مدیریت
 
 | گزینه | کار |
 |-------|-----|
 | 1 | نصب |
 | 2 | آپدیت |
 | 3 | حذف کامل |
-| 4 | ریست وب‌هوک / دامنه |
+| 4 | ریست وب‌هوک و دامنه |
 | 5 | تمدید SSL |
 | 6 | راهنما |
 | 7 | وضعیت نصب |
@@ -96,8 +180,219 @@ sudo virabot update
 | 9 | فهرست نصب‌ها |
 | 0 | خروج |
 
+## ساختار ریپو
+
+| فایل | نقش |
+|------|-----|
+| `install.sh` | نصب یک‌خطی |
+| `virabot-latest.zip` | بسته آخرین نسخه |
+| `VERSION` | شماره نسخه |
+| `CHANGELOG.md` | تغییرات |
+| `README.md` | همین صفحه |
+| `docs/virabot-guide.pdf` | راهنمای مصور |
+
+## حمایت
+
+USDT / TON روی شبکه BEP20:
+
+```text
+0xa1a89602DDB47682091Af3Da1737672bd97f5669
+```
+
 ## سلب مسئولیت
 
 این نرم‌افزار برای مدیریت سرویس‌های خودتان است. مسئولیت سرور، دامنه، امنیت و رعایت قوانین محلی با بهره‌بردار است.
 
-**ریپو:** [silent4time/virabot](https://github.com/silent4time/virabot)
+---
+
+# English
+
+## About
+
+Virabot is a sales and subscription bot for network services. It runs on Telegram and Bale at the same time: purchase, payment, automatic delivery, wallet, and an admin panel in one system.
+
+It is built on the open-source Mirza bot. Thanks to the original author: [mahdiMGF2/mirzabot](https://github.com/mahdiMGF2/mirzabot)
+
+## Compared with similar bots
+
+| Topic | Similar bots | Virabot |
+|--------|----------------|---------|
+| Architecture | Fresh rewrite | Previous generation, customized |
+| Telegram | Yes | Yes |
+| Bale and Bale Pay | No | Yes |
+| Card transfer and wallet | Limited | Stable and tested |
+| Eylan panel | No | Full |
+| Connectix panel | No | Full |
+| Scheduled backup | Limited | Manual, interval, and start hour |
+| Time zone | — | Selectable |
+| Pricing and concurrent users | — | Yes |
+
+## Main features
+
+| Feature | What it does |
+|---------|----------------|
+| Telegram + Bale | One database, separate webhooks |
+| Automatic sales | Product, payment, service creation, config delivery |
+| Wallet | Top up and buy from balance |
+| Multiple panels | Common service-management panels |
+| Admin tools | Products, users, payments, stats, backup |
+| Apache + SSL | Apache install with a certificate |
+| Server menu | Install, update, remove, reset, renew SSL |
+
+## Added features
+
+| Feature | Detail |
+|---------|--------|
+| Telegram + Bale together | Separate webhooks, shared database, reports to both groups |
+| Bale Pay from Telegram | Sends the Telegram user to the Bale bot to pay |
+| Stable card transfer | Invoice, card, receipt, admin approval |
+| Eylan panel | Protocol split by inbound id |
+| Concurrent users | Set per product; zero means unlimited |
+| Plan list | Volume, time, users, price; sorted by price |
+| Manual backup | Immediate SQL to the Telegram and Bale groups |
+| Backup schedule | Hour interval and start hour |
+| Time zone | Chosen in the admin panel; Tehran by default; Jalali dates |
+| Bale report group | Separate Bale group id |
+| Web panel and mini app | Web dashboard, backup tab, Telegram shop |
+
+## Activation code
+
+The free edition supports **20 users** across all panels. After that, new users cannot be created. A paid activation code is required for full use.
+
+To buy or renew, message **@silentpingvpn** on Telegram: [t.me/silentpingvpn](https://t.me/silentpingvpn)
+
+### Register the key
+
+1. Open the admin menu in the bot.
+2. Tap **Bot license**, then **Register / edit license key**, and send the key.
+3. To see the status, send:
+
+```text
+/license
+```
+
+A key only works on the domain it was issued for.
+
+## Payment methods
+
+- **Bale Pay:** online payment inside Bale; Telegram users are guided to the Bale bot
+- **Card transfer:** show the card, receive the receipt, admin confirms
+- **Wallet:** buy from the user balance
+
+## Supported panels
+
+| Panel | Id |
+|-------|----|
+| Marzban | `marzban` |
+| Marzneshin | `marzneshin` |
+| Pasarguard | `pasarguard` |
+| Another agent bot | `mirza_agent` |
+| Sanaei | `x-ui_single` |
+| Alireza | `alireza_single` |
+| Hiddify | `hiddify` |
+| Manual sale | `Manualsale` |
+| WGDashboard | `WGDashboard` |
+| s-UI | `s_ui` |
+| IBSng | `ibsng` |
+| MikroTik | `mikrotik` |
+| Rebecca | `rebecca` |
+| Eylan | `eylan` |
+| Connectix | `connectix` |
+
+Add a panel from the admin menu: panel management, add panel.
+
+## Connectix
+
+Seller site: [seller.connectix.vip](https://seller.connectix.vip)
+
+- Panel type: **Connectix**
+- API address: `https://seller-api.connectix.vip/externel/v1`
+- The panel password is the API token
+- After saving, active plans are created as products
+- Plans with `free` in the title are trial plans and go to the test-account button
+
+| Action | Request |
+|--------|---------|
+| Create user | `POST /clients/store`, then `GET /clients/show?id=` |
+| Usage | `GET /clients/show?id=` |
+| Find id | `GET /clients?username=` |
+| Renew | `POST /clients/add-plan` |
+
+A successful add-plan is a real purchase and the bot does not repeat it. The path spelling is `externel`, not external.
+
+## Several installs on one server
+
+| Must be separate | Example |
+|------------------|---------|
+| Path | `/home/virabot` and `/home/virabot2` |
+| Domain | `bot1.example.com` and `bot2.example.com` |
+| Database | Separate name and user |
+| Token | A token for each bot |
+
+Each install has its own file in `/etc/virabot/instances`. If more than one exists, update and remove ask which one to use.
+
+## Install path
+
+| Item | Path |
+|------|------|
+| Bot folder | `/home/virabot` |
+| Management menu | `/opt/virabot-src` |
+| Settings | `/etc/virabot/instances/<id>.env` |
+| Backups | `/root/virabot-backups` |
+| Command | `sudo virabot` |
+
+## Install
+
+```bash
+curl -fsSL https://raw.githubusercontent.com/silent4time/virabot/main/install.sh | sudo bash
+```
+
+Choose **1) Install**. The script asks for the domain, Telegram token, Bale token, and database details.
+
+## Update
+
+```bash
+sudo virabot update
+```
+
+Or choose **2) Update**. Core files are backed up first.
+
+## Management menu
+
+| Option | Action |
+|--------|--------|
+| 1 | Install |
+| 2 | Update |
+| 3 | Remove |
+| 4 | Reset webhook and domain |
+| 5 | Renew SSL |
+| 6 | Help |
+| 7 | Install status |
+| 8 | Bots and groups |
+| 9 | List installs |
+| 0 | Exit |
+
+## Repository
+
+| File | Role |
+|------|------|
+| `install.sh` | One-line installer |
+| `virabot-latest.zip` | Latest package |
+| `VERSION` | Version number |
+| `CHANGELOG.md` | Changes |
+| `README.md` | This page |
+| `docs/virabot-guide.pdf` | Illustrated guide |
+
+## Support the project
+
+USDT / TON on BEP20:
+
+```text
+0xa1a89602DDB47682091Af3Da1737672bd97f5669
+```
+
+## Disclaimer
+
+This software is for managing your own services. The operator is responsible for the server, domain, security, and local laws.
+
+**Repo:** [silent4time/virabot](https://github.com/silent4time/virabot)
