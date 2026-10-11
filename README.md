@@ -20,7 +20,7 @@
 
 <a id="fa"></a>
 
-# 🇮🇷 فارسی
+# فارسی
 
 ## ✨ معرفی
 
@@ -250,7 +250,7 @@ USDT / TON روی شبکه BEP20:
 
 <a id="en"></a>
 
-# 🇬🇧 English
+# English
 
 ## ✨ About
 
