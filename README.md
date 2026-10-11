@@ -5,13 +5,20 @@
 <h1 align="center">ویرابات · Virabot</h1>
 
 <p align="center">
-  <a href="#فارسی">فارسی</a> · <a href="#english">English</a><br>
-  <b>نسخه ۵.۲.۰</b> · <a href="CHANGELOG.md">تغییرات</a> · <a href="https://github.com/silent4time/virabot/releases/tag/v5.2.0">ریلیز</a> · <a href="docs/virabot-guide.pdf">راهنمای مصور</a>
+  <a href="#fa"><img src="docs/buttons/fa.png" alt="فارسی" height="36"></a>
+  <a href="#en"><img src="docs/buttons/en.png" alt="English" height="36"></a>
+</p>
+<p align="center">
+  <a href="https://github.com/silent4time/virabot/blob/main/CHANGELOG.md"><img src="docs/buttons/changelog.png" alt="تغییرات" height="36"></a>
+  <a href="https://github.com/silent4time/virabot/releases/tag/v5.2.0"><img src="docs/buttons/release.png" alt="ریلیز" height="36"></a>
+  <a href="https://github.com/silent4time/virabot/raw/main/docs/virabot-guide.pdf"><img src="docs/buttons/guide.png" alt="راهنمای مصور" height="36"></a>
 </p>
 
 ربات فروش و مدیریت اشتراک سرویس‌های شبکه برای تلگرام و بله.
 
 ---
+
+<a id="fa"></a>
 
 # 🇮🇷 فارسی
 
@@ -240,6 +247,8 @@ USDT / TON روی شبکه BEP20:
 این نرم‌افزار برای مدیریت سرویس‌های خودتان است. مسئولیت سرور، دامنه، امنیت و رعایت قوانین محلی با بهره‌بردار است.
 
 ---
+
+<a id="en"></a>
 
 # 🇬🇧 English
 
