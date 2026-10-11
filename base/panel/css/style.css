@@ -49,3 +49,22 @@ html,body,button,input,select,textarea{font-family:Vazirmatn,Tahoma,sans-serif !
 [data-theme=vira] .btn-primary,[data-theme=vira] button.btn{background:#f0c43a !important;color:#1a160c !important;border-color:#f0c43a !important}
 [data-theme=vira] a,[data-theme=vira] .nav-item.active{color:#f0c43a}
 [data-theme=vira] .brand-mark{background:#f0c43a;color:#1a160c}
+
+@media (max-width:900px){
+  .main,.content,.card{max-width:100%;min-width:0}
+  .content{overflow-x:hidden}
+  .tbl-wrap{overflow-x:auto;max-width:100%}
+  .card .tbl-wrap{overflow-x:auto}
+  .stat,.dash-secondary,.two-col{min-width:0}
+}
+@media (max-width:430px){
+  .brand-line{font-size:22px !important;white-space:normal !important}
+}
+
+html,body{overflow-x:hidden}
+@media (max-width:900px){
+  .brand-line{font-size:22px !important;white-space:normal !important;line-height:1.4;padding:0 12px}
+  .auth-box{width:min(380px,100%)}
+  .tbl-wrap,.card{max-width:100%}
+  .tbl-wrap{overflow-x:auto}
+}
