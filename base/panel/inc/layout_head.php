@@ -18,17 +18,19 @@ $initials = mb_strtoupper(mb_substr($currentUser, 0, 1, 'UTF-8'), 'UTF-8');
   <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
   <title><?= $textbotlang['panel']['layoutBrandName'] ?></title>
   <link rel="stylesheet" href="css/style.css">
+  <link rel="stylesheet" href="css/virabot.css">
   <script>
     (function () {
-      var t = localStorage.getItem('panel-theme') || 'navy';
+      var t = localStorage.getItem('panel-theme') || 'carunit';
       var bg = {
-        navy: '#0F172A', purple: '#180D2E', emerald: '#0A1F1C',
+        navy: '#0F172A', carunit: '#0d0d0d', purple: '#180D2E', emerald: '#0A1F1C',
         sunset: '#1A0D0D', slate: '#080808', light: '#F1F5F9',
         linen: '#FAF7F2', mint: '#F0FDF4', lavender: '#FAF5FF'
       };
 
       var root = document.documentElement;
-      root.style.backgroundColor = bg[t] || '#0F172A';
+      if (t === 'navy') t = 'carunit';
+      root.style.backgroundColor = bg[t] || '#0d0d0d';
       root.setAttribute('data-theme', t);
 
       root.style.colorScheme = (t === 'light' || t === 'linen' || t === 'mint' || t === 'lavender') ? 'light' : 'dark';
@@ -84,7 +86,7 @@ $initials = mb_strtoupper(mb_substr($currentUser, 0, 1, 'UTF-8'), 'UTF-8');
 
     <aside class="sidebar" id="sidebar">
       <div class="sidebar-brand">
-        <div class="brand-mark">M</div>
+        <div class="brand-mark">V</div>
         <div class="brand-name"><?= $textbotlang['panel']['layoutNavProducts'] ?><span>
             <?= $textbotlang['panel']['layoutNavPayments'] ?></span></div>
       </div>
