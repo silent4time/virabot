@@ -34,6 +34,12 @@ if [[ ${EUID:-$(id -u)} -ne 0 ]]; then
 fi
 
 export DEBIAN_FRONTEND=noninteractive
+if [[ "${VIRABOT_UPDATED:-0}" != "1" ]]; then
+  echo "[*] Updating the server (apt update && apt upgrade)"
+  apt-get update -y
+  apt-get upgrade -y
+  export VIRABOT_UPDATED=1
+fi
 command -v curl >/dev/null 2>&1 || { apt-get update -y >/dev/null 2>&1; apt-get install -y curl >/dev/null 2>&1; }
 command -v unzip >/dev/null 2>&1 || { apt-get update -y >/dev/null 2>&1; apt-get install -y unzip >/dev/null 2>&1; }
 
