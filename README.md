@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="panel/virabot-logo.png" alt="Virabot" width="420">
+  <img src="docs/virabot-logo-header.png" alt="Virabot" width="420">
 </p>
 
 <h1 align="center">ویرابات · Virabot</h1>
