@@ -1,0 +1,7 @@
+<FilesMatch "\.(txt|json|sql|zip|log|env|ini|bak|md)$">
+    Require all denied
+</FilesMatch>
+<Files "config.php">
+    Require all denied
+</Files>
+RedirectMatch 403 ^/(storage|cronbot|vendor|lang|ibsng)(/|$)

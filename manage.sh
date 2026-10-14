@@ -856,6 +856,14 @@ apply_patch_files() {
     mkdir -p "${target}/cronbot"
     cp -f "${src_patch}/cronbot/"*.php "${target}/cronbot/" 2>/dev/null || true
   fi
+  # فایل زبان فارسی برندشده (متن درباره/گزارش ربات)
+  if [[ -f "${src_patch}/lang-fa.php" && -d "${target}/lang" ]]; then
+    if php -l "${src_patch}/lang-fa.php" >/dev/null 2>&1; then
+      cp -f "${src_patch}/lang-fa.php" "${target}/lang/fa.php"
+    else
+      warn "lang-fa.php has a syntax error; skipped"
+    fi
+  fi
   # هوک‌های پنل ایلان/کانکتیکس و رفع اشکال‌ها در نصب تازه هم باید اجرا شوند
   for p in apply_eylan_panels.php apply_connectix_panels.php apply_fixes.php; do
     if [[ -f "${target}/${p}" ]]; then
@@ -864,7 +872,7 @@ apply_patch_files() {
   done
   # برندینگ متن‌های درباره/گزارش ربات
   if [[ -f "${target}/apply_branding.php" && -f "${target}/lang/fa.php" ]]; then
-    php "${target}/apply_branding.php" 2>/dev/null || true
+    (cd "$target" && php apply_branding.php) || warn "branding skipped"
   fi
 }
 
@@ -1319,6 +1327,15 @@ do_update() {
     cp -f "${src_patch}/cronbot/"*.php "${INSTALL_DIR}/cronbot/" 2>/dev/null || true
     ok "  cronbot/"
   fi
+  # Persian language file (about / report texts)
+  if [[ -f "${src_patch}/lang-fa.php" && -d "${INSTALL_DIR}/lang" ]]; then
+    if php -l "${src_patch}/lang-fa.php" >/dev/null 2>&1; then
+      cp -f "${src_patch}/lang-fa.php" "${INSTALL_DIR}/lang/fa.php"
+      ok "  lang/fa.php"
+    else
+      warn "  lang-fa.php has a syntax error; skipped"
+    fi
+  fi
 
   if [[ -f "$tmp/VERSION" ]]; then
     cp -f "$tmp/VERSION" "${INSTALL_DIR}/VERSION"
@@ -1346,11 +1363,25 @@ do_update() {
   done
   if [[ -n "$app_src" ]]; then
     mkdir -p "${INSTALL_DIR}/app"
-    [[ -f "$app_src/virabot.css" ]] && cp -f "$app_src/virabot.css" "${INSTALL_DIR}/app/virabot.css"
-    [[ -f "$app_src/index.php" ]] && cp -f "$app_src/index.php" "${INSTALL_DIR}/app/index.php"
-    ok "  mini app theme"
+    if [[ -d "$app_src/assets" ]]; then
+      rm -rf "${INSTALL_DIR}/app/assets"
+      cp -a "$app_src/." "${INSTALL_DIR}/app/"
+      ok "  mini app (pages, assets, version)"
+    else
+      [[ -f "$app_src/virabot.css" ]] && cp -f "$app_src/virabot.css" "${INSTALL_DIR}/app/virabot.css"
+      [[ -f "$app_src/index.php" ]] && cp -f "$app_src/index.php" "${INSTALL_DIR}/app/index.php"
+      ok "  mini app theme"
+    fi
   else
     warn "  mini app theme missing from update package"
+  fi
+  api_src=""
+  for cand in "$pkg/base/api" "$pkg/api"; do
+    if [[ -f "$cand/miniapp.php" ]]; then api_src="$cand"; break; fi
+  done
+  if [[ -n "$api_src" && -d "${INSTALL_DIR}/api" ]]; then
+    cp -f "$api_src/miniapp.php" "${INSTALL_DIR}/api/miniapp.php"
+    ok "  mini app API"
   fi
   if [[ -f "$pkg/theme/virabot.css" ]]; then
     mkdir -p "${INSTALL_DIR}/theme"
@@ -1400,7 +1431,7 @@ try {
   # Branding (about / report texts)
   if [[ -f "${INSTALL_DIR}/apply_branding.php" && -f "${INSTALL_DIR}/lang/fa.php" ]]; then
     info "Applying branding..."
-    (cd "$INSTALL_DIR" && timeout 15 php apply_branding.php) 2>/dev/null || warn "branding skipped"
+    (cd "$INSTALL_DIR" && timeout 15 php apply_branding.php) || warn "branding skipped"
   fi
 
   newv="$(version_of "$INSTALL_DIR")"

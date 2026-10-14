@@ -19,7 +19,7 @@
 
 <p align="center">
   <a href="https://github.com/silent4time/virabot/blob/main/CHANGELOG.md"><img src="docs/btn/log.png" alt="تغییرات" height="36"></a>
-  <a href="https://github.com/silent4time/virabot/releases/tag/v5.2.0"><img src="docs/btn/rel.png" alt="ریلیز" height="36"></a>
+  <a href="https://github.com/silent4time/virabot/releases/tag/v5.3.0"><img src="docs/btn/rel.png" alt="ریلیز" height="36"></a>
   <a href="https://github.com/silent4time/virabot/raw/main/docs/virabot-guide.pdf"><img src="docs/btn/pdf.png" alt="راهنمای مصور" height="36"></a>
 </p>
 
@@ -29,7 +29,7 @@
 
 ویرابات یک ربات کامل برای فروش اشتراک سرویس‌های شبکه است که همزمان روی تلگرام و پیام‌رسان بله کار می‌کند. خرید، پرداخت، تحویل خودکار سرویس، کیف پول و پنل مدیریت در یک سیستم است.
 
-این پروژه بر پایه ربات متن‌باز میرزا توسعه یافته است. تشکر از سازنده اصلی: [mahdiMGF2/mirzabot](https://github.com/mahdiMGF2/mirzabot)
+با تشکر از سازنده ربات میرزا، [mahdiMGF2](https://github.com/mahdiMGF2/mirzabot) 💛
 
 ## 📊 مقایسه با ربات‌های مشابه
 
@@ -85,7 +85,7 @@
 
 </div>
 
-## 🔑 کد فعال‌سازی
+## 🔑 کد فعال‌سازی (ویراکد)
 
 نسخه رایگان تا **۲۰ کاربر** در همه پنل‌ها کار می‌کند. بعد از آن ساخت کاربر جدید متوقف می‌شود. برای استفاده کامل باید کد فعال‌سازی بخرید.
 
@@ -94,7 +94,7 @@
 ### ثبت کلید
 
 1. در ربات وارد منوی مدیریت شوید.
-2. **لایسنس ربات** و بعد **ثبت / ویرایش کلید لایسنس** را بزنید و کلید را بفرستید.
+2. دکمهٔ **🔑 کد ویرابات** و بعد **✏️ ثبت / ویرایش کلید لایسنس** را بزنید و کلید را بفرستید.
 3. برای دیدن وضعیت، این دستور را بفرستید:
 
 ```text
@@ -102,6 +102,36 @@
 ```
 
 کلید فقط روی دامنه‌ای کار می‌کند که برایش صادر شده است.
+
+## 📱 مینی‌اپ
+
+مینی‌اپ فروشگاه داخل تلگرام و بله، روی آدرس `https://دامنه-شما/app/` باز می‌شود. مراحل خرید مثل خود ربات است:
+
+1. **انتخاب دسته‌بندی**
+2. **انتخاب سرویس** (فقط سرویس‌هایی که برای آن دسته محصول دارند)
+3. انتخاب مدت زمان
+4. انتخاب پلن
+5. تأیید و پرداخت از موجودی
+
+اگر فقط یک دسته یا یک سرویس وجود داشته باشد، همان مرحله خودکار رد می‌شود. برای فعال‌سازی مینی‌اپ در BotFather: `/mybots` ← Bot Settings ← Configure Mini App ← Enable Mini App ← Edit Mini App URL و آدرس بالا را بفرستید.
+
+## 🖥️ صفحه مدیریت وب
+
+پنل وب روی `https://دامنه-شما/panel/` است و با همان نام کاربری و رمز ادمین ربات وارد می‌شود.
+
+<div align="center">
+
+| بخش | کار |
+|-----|-----|
+| داشبورد | آمار کلی ربات |
+| کاربران، فاکتورها، سرویس‌ها | مشاهده و مدیریت |
+| محصولات و پرداخت‌ها | مدیریت محصول و روش‌های پرداخت |
+| تنظیمات ← ظاهر | انتخاب تم رنگی |
+| تنظیمات ← امنیت | تغییر رمز ورود |
+| تنظیمات ← سیستم | اطلاعات سرور و PHP |
+| تنظیمات ← بکاپ | دریافت و ارسال بکاپ |
+
+</div>
 
 ## 💳 روش‌های پرداخت
 
@@ -255,7 +285,7 @@ USDT / TON روی شبکه BEP20:
 
 <p align="center">
   <a href="https://github.com/silent4time/virabot/blob/main/CHANGELOG.md"><img src="docs/btn/log-en.png" alt="Changelog" height="36"></a>
-  <a href="https://github.com/silent4time/virabot/releases/tag/v5.2.0"><img src="docs/btn/rel-en.png" alt="Release" height="36"></a>
+  <a href="https://github.com/silent4time/virabot/releases/tag/v5.3.0"><img src="docs/btn/rel-en.png" alt="Release" height="36"></a>
   <a href="https://github.com/silent4time/virabot/raw/main/docs/virabot-guide.pdf"><img src="docs/btn/pdf-en.png" alt="Guide" height="36"></a>
 </p>
 
@@ -265,7 +295,7 @@ USDT / TON روی شبکه BEP20:
 
 Virabot is a sales and subscription bot for network services. It runs on Telegram and Bale at the same time: purchase, payment, automatic delivery, wallet, and an admin panel in one system.
 
-It is built on the open-source Mirza bot. Thanks to the original author: [mahdiMGF2/mirzabot](https://github.com/mahdiMGF2/mirzabot)
+Thanks to the creator of the Mirza bot, [mahdiMGF2](https://github.com/mahdiMGF2/mirzabot) 💛
 
 ## 📊 Compared with similar bots
 
@@ -321,7 +351,7 @@ It is built on the open-source Mirza bot. Thanks to the original author: [mahdiM
 
 </div>
 
-## 🔑 Activation code
+## 🔑 Activation code (Viracode)
 
 The free edition supports **20 users** across all panels. After that, new users cannot be created. A paid activation code is required for full use.
 
@@ -330,7 +360,7 @@ To buy or renew, message **@silentpingvpn** on Telegram: [t.me/silentpingvpn](ht
 ### Register the key
 
 1. Open the admin menu in the bot.
-2. Tap **Bot license**, then **Register / edit license key**, and send the key.
+2. Tap **🔑 کد ویرابات** (Virabot code), then **✏️ ثبت / ویرایش کلید لایسنس** (register / edit license key), and send the key.
 3. To see the status, send:
 
 ```text
@@ -338,6 +368,36 @@ To buy or renew, message **@silentpingvpn** on Telegram: [t.me/silentpingvpn](ht
 ```
 
 A key only works on the domain it was issued for.
+
+## 📱 Mini app
+
+The store mini app opens inside Telegram and Bale at `https://your-domain/app/`. The purchase steps match the bot:
+
+1. **Choose a category**
+2. **Choose a service** (only services that have products in that category)
+3. Choose a time range
+4. Choose a plan
+5. Confirm and pay from the balance
+
+If there is only one category or one service, that step is skipped automatically. To enable it in BotFather: `/mybots` → Bot Settings → Configure Mini App → Enable Mini App → Edit Mini App URL, then send the address above.
+
+## 🖥️ Web admin page
+
+The web panel lives at `https://your-domain/panel/` and uses the same admin username and password as the bot.
+
+<div align="center">
+
+| Section | What it does |
+|---------|--------------|
+| Dashboard | Overall bot statistics |
+| Users, invoices, services | View and manage |
+| Products and payments | Manage products and payment methods |
+| Settings → Appearance | Pick a colour theme |
+| Settings → Security | Change the login password |
+| Settings → System | Server and PHP information |
+| Settings → Backup | Download and send backups |
+
+</div>
 
 ## 💳 Payment methods
 

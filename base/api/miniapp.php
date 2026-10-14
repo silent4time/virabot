@@ -341,7 +341,23 @@ switch ($data['actions']) {
                 $is_note = true;
             if ($setting['statusnoteforf'] == "0" && $user_info['agent'] == "f")
                 $is_note = false;
+            $filter_category = null;
+            $category_param = isset($data['category_id']) ? (string) $data['category_id'] : '0';
+            if ($category_param !== '' && $category_param !== '0' && ctype_digit($category_param)) {
+                $category_row = select("category", "*", "id", $category_param, "select");
+                if ($category_row && !empty($category_row['remark']))
+                    $filter_category = $category_row['remark'];
+            }
             while ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                if ($filter_category !== null) {
+                    $stmtc = $pdo->prepare("SELECT 1 FROM product WHERE (Location = :location OR Location = '/all') AND category = :category AND agent = :agent LIMIT 1");
+                    $stmtc->bindValue(':location', $result['name_panel'], PDO::PARAM_STR);
+                    $stmtc->bindValue(':category', $filter_category, PDO::PARAM_STR);
+                    $stmtc->bindValue(':agent', $user_info['agent'], PDO::PARAM_STR);
+                    $stmtc->execute();
+                    if (!$stmtc->fetchColumn())
+                        continue;
+                }
                 if ($result['MethodUsername'] == $textbotlang['users']['customusername'] || $result['MethodUsername'] == $textbotlang['keyboard']['customUsernameRandom']) {
                     $is_username = true;
                 } else {
@@ -398,6 +414,43 @@ switch ($data['actions']) {
             $stmt = $pdo->prepare("SELECT * FROM category");
             $stmt->execute();
             $category_list = [];
+            if ($data['id_panel'] === '' || $data['id_panel'] === null) {
+                $stmtp = $pdo->prepare("SELECT name_panel, hide_user FROM marzban_panel WHERE status = 'active' AND (agent = :agent OR agent = 'all') AND type != 'Manualsale'");
+                $stmtp->bindParam(':agent', $user_info['agent']);
+                $stmtp->execute();
+                $visible_panels = [];
+                while ($prow = $stmtp->fetch(PDO::FETCH_ASSOC)) {
+                    $hidden_for = $prow['hide_user'] != null ? (array) json_decode($prow['hide_user'], true) : [];
+                    if (in_array($user_info['id'], $hidden_for))
+                        continue;
+                    $visible_panels[] = $prow['name_panel'];
+                }
+                while ($result = $stmt->fetch(PDO::FETCH_ASSOC)) {
+                    $stmts = $pdo->prepare("SELECT Location FROM product WHERE category = :category AND agent = :agent");
+                    $stmts->bindParam(':category', $result['remark'], PDO::PARAM_STR);
+                    $stmts->bindParam(':agent', $user_info['agent']);
+                    $stmts->execute();
+                    $has_product = false;
+                    foreach ($stmts->fetchAll(PDO::FETCH_COLUMN) as $product_location) {
+                        if ($visible_panels !== [] && ($product_location == '/all' || in_array($product_location, $visible_panels))) {
+                            $has_product = true;
+                            break;
+                        }
+                    }
+                    if (!$has_product)
+                        continue;
+                    $category_list[] = [
+                        'id' => $result['id'],
+                        'name' => $result['remark'],
+                    ];
+                }
+                echo json_encode([
+                    'status' => true,
+                    'msg' => "Successful",
+                    'obj' => $category_list
+                ]);
+                return;
+            }
             $panel = select("marzban_panel", "*", "code_panel", $data['id_panel'], "select");
             if (empty($panel)) {
                 echo json_encode(array(
