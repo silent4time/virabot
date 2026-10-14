@@ -1,10 +1,10 @@
-import { j as e, m as M, r as l, c as O, u as Ee } from "./vendor-UyIzR1nt.js";
-import { c as L, a as F, u as U, L as K, f as ie } from "./index-fEy3wUY4.js";
-import { P as Pe } from "./page-transition-xx49SOnx.js";
-import { B as A, c as J } from "./button-FRS97A8p.js";
-import { u as Re, S as Ie } from "./use-media-q6FU7qbx.js";
-import { C as Me } from "./chevron-left-dLPLXUzE.js";
-import { C as $, a as z, b as q, c as G } from "./card-xrUmt6QB.js";
+import { j as e, m as M, r as l, c as O, u as Ee } from "./vendor-cSKCWCw4.js";
+import { c as L, a as F, u as U, L as K, f as ie } from "./index-TvERbYxt.js";
+import { P as Pe } from "./page-transition-hN2mnFFY.js";
+import { B as A, c as J } from "./button-C5RSbfXw.js";
+import { u as Re, S as Ie } from "./use-media-3gyItSgI.js";
+import { C as Me } from "./chevron-left-IhR4fNgD.js";
+import { C as $, a as z, b as q, c as G } from "./card-N4SQnQPv.js";
 import {
   c as Ae,
   a as ue,
@@ -13,9 +13,9 @@ import {
   d as H,
   e as $e,
   f as ze,
-} from "./ui-c7x6w1k0.js";
-import { I as oe } from "./input-Xa53ivc6.js";
-import { C as Le } from "./circle-alert-yHNprA0s.js";
+} from "./ui-gYM7APLu.js";
+import { I as oe } from "./input-2dfms11E.js";
+import { C as Le } from "./circle-alert-RK8OBdj8.js";
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -236,7 +236,12 @@ function et({
               }),
               e.jsxs("div", {
                 className: "text-sm text-muted-foreground",
-                children: ["مرحله ", s, " از ", t.length],
+                children: [
+                  "مرحله ",
+                  s - [...n].filter((z) => z < s).length,
+                  " از ",
+                  t.length - n.size,
+                ],
               }),
             ],
           }),
@@ -245,7 +250,9 @@ function et({
             children: e.jsx(M.div, {
               className: "bg-primary rounded-full h-2",
               initial: { width: 0 },
-              animate: { width: `${(s / t.length) * 100}%` },
+              animate: {
+                width: `${((s - [...n].filter((z) => z < s).length) / (t.length - n.size)) * 100}%`,
+              },
               transition: { duration: 0.3 },
             }),
           }),
