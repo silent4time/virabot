@@ -19,7 +19,7 @@
 
 <p align="center">
   <a href="https://github.com/silent4time/virabot/blob/main/CHANGELOG.md"><img src="docs/btn/log.png" alt="تغییرات" height="36"></a>
-  <a href="https://github.com/silent4time/virabot/releases/tag/v5.3.2"><img src="docs/btn/rel.png" alt="ریلیز" height="36"></a>
+  <a href="https://github.com/silent4time/virabot/releases/tag/v5.4.0"><img src="docs/btn/rel.png" alt="ریلیز" height="36"></a>
   <a href="https://github.com/silent4time/virabot/raw/main/docs/virabot-guide.pdf"><img src="docs/btn/pdf.png" alt="راهنمای مصور" height="36"></a>
 </p>
 
@@ -112,6 +112,8 @@
 3. انتخاب مدت زمان
 4. انتخاب پلن
 5. تأیید و پرداخت از موجودی
+
+اگر موجودی کافی نباشد، دکمهٔ «پرداخت کسری» روش‌های پرداخت فعال (کارت‌به‌کارت، بله‌پی و ...) را داخل چت ربات برای مبلغ کسری ارسال می‌کند.
 
 اگر فقط یک دسته یا یک سرویس وجود داشته باشد، همان مرحله خودکار رد می‌شود. برای فعال‌سازی مینی‌اپ در BotFather: `/mybots` ← Bot Settings ← Configure Mini App ← Enable Mini App ← Edit Mini App URL و آدرس بالا را بفرستید.
 
@@ -285,7 +287,7 @@ USDT / TON روی شبکه BEP20:
 
 <p align="center">
   <a href="https://github.com/silent4time/virabot/blob/main/CHANGELOG.md"><img src="docs/btn/log-en.png" alt="Changelog" height="36"></a>
-  <a href="https://github.com/silent4time/virabot/releases/tag/v5.3.2"><img src="docs/btn/rel-en.png" alt="Release" height="36"></a>
+  <a href="https://github.com/silent4time/virabot/releases/tag/v5.4.0"><img src="docs/btn/rel-en.png" alt="Release" height="36"></a>
   <a href="https://github.com/silent4time/virabot/raw/main/docs/virabot-guide.pdf"><img src="docs/btn/pdf-en.png" alt="Guide" height="36"></a>
 </p>
 
@@ -378,6 +380,8 @@ The store mini app opens inside Telegram and Bale at `https://your-domain/app/`.
 3. Choose a time range
 4. Choose a plan
 5. Confirm and pay from the balance
+
+If the balance is not enough, the “pay the shortfall” button sends the active payment methods (card-to-card, Bale Pay, etc.) to the bot chat for the missing amount.
 
 If there is only one category or one service, that step is skipped automatically. To enable it in BotFather: `/mybots` → Bot Settings → Configure Mini App → Enable Mini App → Edit Mini App URL, then send the address above.
 

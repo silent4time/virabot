@@ -1,10 +1,10 @@
-import { j as e, m as M, r as l, c as O, u as Ee } from "./vendor-cSKCWCw4.js";
-import { c as L, a as F, u as U, L as K, f as ie } from "./index-TvERbYxt.js";
-import { P as Pe } from "./page-transition-hN2mnFFY.js";
-import { B as A, c as J } from "./button-C5RSbfXw.js";
-import { u as Re, S as Ie } from "./use-media-3gyItSgI.js";
-import { C as Me } from "./chevron-left-IhR4fNgD.js";
-import { C as $, a as z, b as q, c as G } from "./card-N4SQnQPv.js";
+import { j as e, m as M, r as l, c as O, u as Ee } from "./vendor-F6FfCUc1.js";
+import { c as L, a as F, u as U, L as K, f as ie } from "./index-xnkkGYKh.js";
+import { P as Pe } from "./page-transition-UFbDFo25.js";
+import { B as A, c as J } from "./button-GZZ7llqW.js";
+import { u as Re, S as Ie } from "./use-media-eytQWFDg.js";
+import { C as Me } from "./chevron-left-qG6ZMyVV.js";
+import { C as $, a as z, b as q, c as G } from "./card-m5NJx6RX.js";
 import {
   c as Ae,
   a as ue,
@@ -13,9 +13,9 @@ import {
   d as H,
   e as $e,
   f as ze,
-} from "./ui-gYM7APLu.js";
-import { I as oe } from "./input-2dfms11E.js";
-import { C as Le } from "./circle-alert-RK8OBdj8.js";
+} from "./ui-yEipzfTp.js";
+import { I as oe } from "./input-BVk0v5zE.js";
+import { C as Le } from "./circle-alert-EB0aKt49.js";
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -1722,6 +1722,7 @@ function Tt({
     [d, h] = l.useState(""),
     [m, b] = l.useState(""),
     [g, j] = l.useState({}),
+    [pb, setPb] = l.useState(null),
     x = n || r,
     S = x ? x.price : 0,
     w = a >= S,
@@ -1758,9 +1759,11 @@ function Tt({
                   custom_note: m.trim(),
                 },
             I = await it(o.id, _);
-          I.success && I.service
-            ? c(I.service)
-            : p(I.message || "خطا در خرید سرویس");
+          I.payment_in_bot
+            ? setPb(I.message || "روش‌های پرداخت داخل ربات برایتان ارسال شد.")
+            : I.success && I.service
+              ? c(I.service)
+              : p(I.message || "خطا در خرید سرویس");
         } catch (_) {
           (console.error("Purchase error:", _),
             typeof _ == "object" &&
@@ -1782,6 +1785,28 @@ function Tt({
       }
     },
     k = t.is_username || t.is_note;
+  if (pb)
+    return e.jsxs("div", {
+      className: "space-y-6 text-center",
+      children: [
+        e.jsx("h2", {
+          className: "text-2xl font-bold mb-2",
+          children: "پرداخت داخل ربات",
+        }),
+        e.jsx("p", { className: "text-muted-foreground", children: pb }),
+        e.jsx(A, {
+          onClick: () => {
+            try {
+              const W = window.Telegram && window.Telegram.WebApp;
+              W && W.close ? W.close() : window.close();
+            } catch (_) {}
+          },
+          className: "w-full",
+          size: "lg",
+          children: "رفتن به ربات",
+        }),
+      ],
+    });
   return e.jsxs("div", {
     className: "space-y-6",
     children: [
@@ -2079,7 +2104,7 @@ function Tt({
                         e.jsx("span", {
                           className: "text-sm",
                           children:
-                            "موجودی کیف پول شما کافی نیست. لطفاً ابتدا کیف پول خود را شارژ کنید.",
+                            "موجودی کیف پول کافی نیست. مبلغ کسری را می‌توانید با کارت‌به‌کارت یا درگاه‌های فعال داخل ربات پرداخت کنید.",
                         }),
                       ],
                     }),
@@ -2094,7 +2119,7 @@ function Tt({
                     }),
                   e.jsx(A, {
                     onClick: R,
-                    disabled: !w || i,
+                    disabled: i,
                     className: "w-full",
                     size: "lg",
                     children: i
@@ -2106,7 +2131,9 @@ function Tt({
                             "در حال پردازش...",
                           ],
                         })
-                      : "تأیید و پرداخت",
+                      : w
+                        ? "تأیید و پرداخت"
+                        : "پرداخت کسری (کارت‌به‌کارت / درگاه)",
                   }),
                 ],
               }),
@@ -2256,7 +2283,11 @@ const de = [
     title: "انتخاب دسته‌بندی",
     description: "دسته‌بندی مورد نظر را انتخاب کنید",
   },
-  { id: 2, title: "انتخاب سرویس", description: "سرویس مورد نظر را انتخاب کنید" },
+  {
+    id: 2,
+    title: "انتخاب سرویس",
+    description: "سرویس مورد نظر را انتخاب کنید",
+  },
   { id: 3, title: "انتخاب مدت زمان", description: "بازه زمانی را تعیین کنید" },
   {
     id: 4,

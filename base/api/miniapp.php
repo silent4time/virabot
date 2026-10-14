@@ -71,6 +71,113 @@ if (!$usercheck || $usercheck['token'] != $tokencheck) {
     http_response_code(403);
     return;
 }
+
+// کیبورد روش‌های پرداخت ربات (همان منطق keyboard.php) برای کاربرِ همین درخواست
+function mv_miniapp_step_payment($u)
+{
+    global $pdo, $textbotlang;
+    $uid = $u['id'];
+    $PaySettingcard = getPaySettingValue("Cartstatus");
+    $PaySettingnow = getPaySettingValue("nowpaymentstatus");
+    $PaySettingaqayepardakht = getPaySettingValue("statusaqayepardakht");
+    $PaySettingpv = getPaySettingValue("Cartstatuspv");
+    $usernamecart = getPaySettingValue("CartDirect");
+    $Swapino = getPaySettingValue("statusSwapWallet");
+    $trnadoo = getPaySettingValue("statustarnado");
+    $paymentverify = getPaySettingValue("checkpaycartfirst");
+    $stmt = $pdo->prepare("SELECT * FROM Payment_report WHERE id_user = :user_id AND payment_Status = 'paid' ");
+    $stmt->bindValue(':user_id', $uid);
+    $stmt->execute();
+    $paymentexits = $stmt->rowCount();
+    $zarinpal = getPaySettingValue("zarinpalstatus");
+    $affilnecurrency = getPaySettingValue("digistatus");
+    $arzireyali3 = getPaySettingValue("statusiranpay3");
+    $paymentstatussnotverify = getPaySettingValue("paymentstatussnotverify");
+    $paymentsstartelegram = getPaySettingValue("statusstar");
+    $payment_status_nowpayment = getPaySettingValue("statusnowpayment");
+    $step_payment = [
+        'inline_keyboard' => []
+    ];
+    if ($PaySettingcard == "oncard" && intval($u['cardpayment']) == 1) {
+        // برای کاربران بله هرگز لینک t.me نساز (هدایت به تلگرام ممنوع)
+        // فقط برای کاربران تلگرام و وقتی حالت PV روشن است از لینک مستقیم استفاده کن
+        $isBaleUser = (function_exists('isBaleInternalId') && isBaleInternalId($uid));
+        if ($PaySettingpv == "oncardpv" && !$isBaleUser && !empty($usernamecart)) {
+            $step_payment['inline_keyboard'][] = [
+                ['text' => $textbotlang['textbot']['cartToCart'], 'url' => "https://t.me/$usernamecart"],
+            ];
+        } else {
+            $step_payment['inline_keyboard'][] = [
+                ['text' => $textbotlang['textbot']['cartToCart'], 'callback_data' => "cart_to_offline"],
+            ];
+        }
+    }
+    if (($paymentexits == 0 && $paymentverify == "onpayverify"))
+        unset($step_payment['inline_keyboard']);
+    if ($PaySettingnow == "onnowpayment") {
+        $step_payment['inline_keyboard'][] = [
+            ['text' => $textbotlang['textbot']['nowPayment'], 'callback_data' => "plisio"]
+        ];
+    }
+    if ($payment_status_nowpayment == "1") {
+        $step_payment['inline_keyboard'][] = [
+            ['text' => $textbotlang['textbot']['cryptoPayment'], 'callback_data' => "nowpayment"]
+        ];
+    }
+    if ($affilnecurrency == "ondigi") {
+        $step_payment['inline_keyboard'][] = [
+            ['text' => $textbotlang['textbot']['nowPaymentTron'], 'callback_data' => "digitaltron"]
+        ];
+    }
+    if ($Swapino == "onSwapinoBot") {
+        $step_payment['inline_keyboard'][] = [
+            ['text' => $textbotlang['textbot']['iranPay2'], 'callback_data' => "iranpay1"]
+        ];
+    }
+    if ($trnadoo == "onternado") {
+        $step_payment['inline_keyboard'][] = [
+            ['text' => $textbotlang['textbot']['iranPay3'], 'callback_data' => "iranpay2"]
+        ];
+    }
+    if ($arzireyali3 == "oniranpay3" && $paymentexits >= 2) {
+        $step_payment['inline_keyboard'][] = [
+            ['text' => $textbotlang['textbot']['iranPay1'], 'callback_data' => "iranpay3"]
+        ];
+    }
+    if ($PaySettingaqayepardakht == "onaqayepardakht") {
+        $step_payment['inline_keyboard'][] = [
+            ['text' => $textbotlang['textbot']['aqayePardakht'], 'callback_data' => "aqayepardakht"]
+        ];
+    }
+    if ($zarinpal == "onzarinpal") {
+        $step_payment['inline_keyboard'][] = [
+            ['text' => $textbotlang['textbot']['zarinPal'], 'callback_data' => "zarinpal"]
+        ];
+    }
+    $balepaystatus = getPaySettingValue("balepaystatus");
+    // بله‌پی برای کاربران بله همیشه (اگر روشن باشد)
+    // برای کاربران تلگرام هم نمایش داده می‌شود تا بتوانند درخواست بدهند و پرداخت از طریق بله انجام شود
+    if ($balepaystatus == "onbalepay") {
+        $step_payment['inline_keyboard'][] = [
+            ['text' => $textbotlang['textbot']['balePay'] ?? '💳 پرداخت با کیف‌پول بله', 'callback_data' => "balepay"]
+        ];
+    }
+    if ($paymentstatussnotverify == "onverifypay") {
+        $step_payment['inline_keyboard'][] = [
+            ['text' => $textbotlang['textbot']['paymentNotVerify'], 'callback_data' => "paymentnotverify"]
+        ];
+    }
+    if (intval($paymentsstartelegram) == 1) {
+        $step_payment['inline_keyboard'][] = [
+            ['text' => $textbotlang['textbot']['starTelegram'], 'callback_data' => "startelegrams"]
+        ];
+    }
+    $step_payment['inline_keyboard'][] = [
+        ['text' => $textbotlang['keyboard']['closeList'], 'callback_data' => "colselist"]
+    ];
+    return json_encode($step_payment);
+}
+
 switch ($data['actions']) {
     case 'invoices':
         if ($method !== "GET") {
@@ -850,9 +957,10 @@ switch ($data['actions']) {
         if (intval($user_info['pricediscount']) != 0) {
             $result = ($product['price_product'] * $user_info['pricediscount']) / 100;
             $product['price_product'] = $product['price_product'] - $result;
-            sendmessage($from_id, sprintf($textbotlang['users']['Discount']['discountapplied'], $user['pricediscount']), null, 'HTML');
+            sendmessage($user_info['id'], sprintf($textbotlang['users']['Discount']['discountapplied'], $user_info['pricediscount']), null, 'HTML');
         }
-        if ($user_info['Balance'] < $product['price_product']) {
+        $insufficient = $user_info['Balance'] < $product['price_product'];
+        if ($insufficient && ($user_info['agent'] == "n2" || intval($product['price_product']) == 0)) {
             http_response_code(500);
             echo json_encode(array(
                 'status' => false,
@@ -870,6 +978,48 @@ switch ($data['actions']) {
                 'status' => false,
                 'msg' => $textbotlang['hardcoded']['usernameExistsRestart']
             ));
+            return;
+        }
+        if ($insufficient) {
+            // موجودی کافی نیست: همان روند ربات؛ پرداخت کسری با کارت‌به‌کارت یا درگاه داخل چت ربات
+            $chat_id = $user_info['id'];
+            $directpay = select("shopSetting", "*", "Namevalue", "statusdirectpabuy", "select");
+            $directpay = is_array($directpay) ? $directpay['value'] : "offdirectbuy";
+            $missing = $product['price_product'] - $user_info['Balance'];
+            if ($missing <= 1)
+                $missing = 0;
+            if ($directpay == "offdirectbuy") {
+                $minbalance = number_format(json_decode(select("PaySetting", "*", "NamePay", "minbalance", "select")['ValuePay'], true)[$user_info['agent']]);
+                $maxbalance = number_format(json_decode(select("PaySetting", "*", "NamePay", "maxbalance", "select")['ValuePay'], true)[$user_info['agent']]);
+                $bakinfos = json_encode([
+                    'inline_keyboard' => [
+                        [
+                            ['text' => $textbotlang['users']['status']['backinfo'], 'callback_data' => "account"],
+                        ]
+                    ]
+                ]);
+                sendmessage($chat_id, sprintf($textbotlang['users']['Balance']['insufficientbalance'], $minbalance, $maxbalance), $bakinfos, 'HTML');
+                step('getprice', $chat_id);
+            } else {
+                $notifctions = json_encode(array(
+                    'volume' => false,
+                    'time' => false,
+                ));
+                $stmt = $pdo->prepare("INSERT IGNORE INTO invoice (id_user, id_invoice, username,time_sell, Service_location, name_product, price_product, Volume, Service_time,Status,note,refral,notifctions) VALUES (?, ?, ?, ?, ?, ?, ?, ?,?,?,?,?,?)");
+                $data['custom_note'] = strval($data['custom_note']) <= 1 ? null : $data['custom_note'];
+                $stmt->execute([$user_info['id'], $randomString, $username_ac, time(), $panel['name_panel'], $product['name_product'], $product['price_product'], $product['Volume_constraint'], $product['Service_time'], "unpaid", $data['custom_note'], $user_info['affiliates'], $notifctions]);
+                update("user", "Processing_value", $missing, "id", $chat_id);
+                sendmessage($chat_id, $textbotlang['users']['sell']['noCredit'], mv_miniapp_step_payment($user_info), 'HTML');
+                step('get_step_payment', $chat_id);
+                update("user", "Processing_value_one", $username_ac, "id", $chat_id);
+                update("user", "Processing_value_tow", "getconfigafterpay", "id", $chat_id);
+            }
+            echo json_encode([
+                'status' => true,
+                'success' => false,
+                'payment_in_bot' => true,
+                'message' => "موجودی کیف پول کافی نیست. روش‌های پرداخت داخل چت ربات برایتان ارسال شد؛ پرداخت را همان‌جا انجام دهید."
+            ]);
             return;
         }
         $notifctions = json_encode(array(
