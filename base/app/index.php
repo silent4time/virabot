@@ -11,10 +11,10 @@ header('Expires: 0');
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Virabot</title>
     <script src="./js/telegram-web-app.js"></script>
-    <script type="module" crossorigin src="./assets/index-xnkkGYKh.js"></script>
-    <link rel="modulepreload" crossorigin href="./assets/vendor-F6FfCUc1.js">
-    <link rel="stylesheet" crossorigin href="./assets/index-DMvJ0y1d.css">
-    <link rel="stylesheet" href="./virabot.css?v=2.3.0">
+    <script type="module" crossorigin src="./assets/index-ofMwDc0d.js"></script>
+    <link rel="modulepreload" crossorigin href="./assets/vendor-0HFnym47.js">
+    <link rel="stylesheet" crossorigin href="./assets/index-MRmVJZPp.css">
+    <link rel="stylesheet" href="./virabot.css?v=2.3.1">
   </head>
   <body>
     <div id="root"></div>

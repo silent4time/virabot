@@ -1014,10 +1014,28 @@ switch ($data['actions']) {
                 update("user", "Processing_value_one", $username_ac, "id", $chat_id);
                 update("user", "Processing_value_tow", "getconfigafterpay", "id", $chat_id);
             }
+            // لینک چت ربات برای بازکردن مستقیم از مینی‌اپ (تلگرام یا بله)
+            $bot_link = '';
+            if (isBaleInternalId($chat_id)) {
+                try {
+                    if (!empty($BALE_APIKEY)) {
+                        $me = telegram('getMe', [], $BALE_APIKEY, 'bale');
+                        if (!empty($me['ok']) && !empty($me['result']['username']))
+                            $bot_link = 'https://ble.ir/' . $me['result']['username'];
+                    }
+                } catch (Throwable $e) {
+                    error_log('miniapp bale getMe: ' . $e->getMessage());
+                }
+                if ($bot_link === '' && !empty($BALE_BOT_USERNAME))
+                    $bot_link = 'https://ble.ir/' . ltrim((string) $BALE_BOT_USERNAME, '@');
+            } elseif (!empty($usernamebot)) {
+                $bot_link = 'https://t.me/' . ltrim((string) $usernamebot, '@');
+            }
             echo json_encode([
                 'status' => true,
                 'success' => false,
                 'payment_in_bot' => true,
+                'bot_link' => $bot_link,
                 'message' => "موجودی کیف پول کافی نیست. روش‌های پرداخت داخل چت ربات برایتان ارسال شد؛ پرداخت را همان‌جا انجام دهید."
             ]);
             return;

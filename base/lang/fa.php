@@ -1272,7 +1272,7 @@ f,n.n2',
                         'err_notfound_user_6' => '❌ کاربری در لیست وجود ندارد',
                         'btn_27' => 'لیست افراد👇',
                         'msg_panel_admin_bot_report' => '💎 | Version Bot: %s
-📌 | Version Mini App: 2.3.0
+📌 | Version Mini App: 2.3.1
 
 <blockquote>🔹 | این ربات اشتراکی است و توسط تیم ویرا توسعه داده شده است</blockquote>
 

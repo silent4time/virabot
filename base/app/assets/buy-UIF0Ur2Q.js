@@ -1,10 +1,10 @@
-import { j as e, m as M, r as l, c as O, u as Ee } from "./vendor-F6FfCUc1.js";
-import { c as L, a as F, u as U, L as K, f as ie } from "./index-xnkkGYKh.js";
-import { P as Pe } from "./page-transition-UFbDFo25.js";
-import { B as A, c as J } from "./button-GZZ7llqW.js";
-import { u as Re, S as Ie } from "./use-media-eytQWFDg.js";
-import { C as Me } from "./chevron-left-qG6ZMyVV.js";
-import { C as $, a as z, b as q, c as G } from "./card-m5NJx6RX.js";
+import { j as e, m as M, r as l, c as O, u as Ee } from "./vendor-0HFnym47.js";
+import { c as L, a as F, u as U, L as K, f as ie } from "./index-ofMwDc0d.js";
+import { P as Pe } from "./page-transition-j0lx411K.js";
+import { B as A, c as J } from "./button-GofF1fux.js";
+import { u as Re, S as Ie } from "./use-media-Wl3TreP5.js";
+import { C as Me } from "./chevron-left-UgWgImhN.js";
+import { C as $, a as z, b as q, c as G } from "./card-bALjVN5L.js";
 import {
   c as Ae,
   a as ue,
@@ -13,9 +13,9 @@ import {
   d as H,
   e as $e,
   f as ze,
-} from "./ui-yEipzfTp.js";
-import { I as oe } from "./input-BVk0v5zE.js";
-import { C as Le } from "./circle-alert-EB0aKt49.js";
+} from "./ui-vNHJierV.js";
+import { I as oe } from "./input-7VRviGR9.js";
+import { C as Le } from "./circle-alert-zxcWVThs.js";
 /**
  * @license lucide-react v0.511.0 - ISC
  *
@@ -1760,7 +1760,11 @@ function Tt({
                 },
             I = await it(o.id, _);
           I.payment_in_bot
-            ? setPb(I.message || "روش‌های پرداخت داخل ربات برایتان ارسال شد.")
+            ? setPb({
+                message:
+                  I.message || "روش‌های پرداخت داخل ربات برایتان ارسال شد.",
+                link: I.bot_link || "",
+              })
             : I.success && I.service
               ? c(I.service)
               : p(I.message || "خطا در خرید سرویس");
@@ -1793,12 +1797,21 @@ function Tt({
           className: "text-2xl font-bold mb-2",
           children: "پرداخت داخل ربات",
         }),
-        e.jsx("p", { className: "text-muted-foreground", children: pb }),
+        e.jsx("p", { className: "text-muted-foreground", children: pb.message }),
         e.jsx(A, {
           onClick: () => {
             try {
               const W = window.Telegram && window.Telegram.WebApp;
-              W && W.close ? W.close() : window.close();
+              const L = pb.link;
+              if (L && W && W.openTelegramLink && /^https:\/\/t\.me\//.test(L)) {
+                W.openTelegramLink(L);
+              } else if (L && W && W.openLink) {
+                W.openLink(L);
+              } else if (L) {
+                window.location.href = L;
+              }
+              if (W && W.close) setTimeout(() => W.close(), 400);
+              else if (!L) window.close();
             } catch (_) {}
           },
           className: "w-full",
