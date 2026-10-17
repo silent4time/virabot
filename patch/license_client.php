@@ -11,22 +11,39 @@ if (!defined('MV_LICENSE_CLIENT')) {
     define('MV_LICENSE_CLIENT', true);
 }
 
-/** @return string decoded default verify URL */
-function mv_license_api_default(): string
+/** @return list<string> decoded built-in verify URLs, in check order */
+function mv_license_api_defaults(): array
 {
-    // XOR + base64 — casual inspection won't show the host as plain text
-    $blob = 'BQIkAhx2RkxeWVFTTx4TfgEGIAwNRkBbWEZDHyJdDjwATERVQF9HFFggGh8=';
+    // XOR + base64 so the hosts are not plain text in the source
+    $blobs = [
+        'BQIkAhx2RkxZVV5fRQ8XPlwcJQUGXERCX08KWCMbGylGAkJZHUBEHx82C0E8ARM=',
+        'BQIkAhx2RkxZVV5fRQ8XPlwcJQUGXERCX08KWDkAQC0ZCh1GV0RICw9+Agc8',
+        'BQIkAhx2RkxRUUBDTwQCfhsdYx4TH1pBWU9CFSVFBGMfBkBZVE8=',
+    ];
     $k = 'mvProLic2026!';
-    $raw = base64_decode($blob, true);
-    if ($raw === false || $raw === '') {
-        return '';
-    }
-    $out = '';
     $kl = strlen($k);
-    for ($i = 0, $n = strlen($raw); $i < $n; $i++) {
-        $out .= chr(ord($raw[$i]) ^ ord($k[$i % $kl]));
+    $out = [];
+    foreach ($blobs as $blob) {
+        $raw = base64_decode($blob, true);
+        if ($raw === false || $raw === '') {
+            continue;
+        }
+        $url = '';
+        for ($i = 0, $n = strlen($raw); $i < $n; $i++) {
+            $url .= chr(ord($raw[$i]) ^ ord($k[$i % $kl]));
+        }
+        if ($url !== '') {
+            $out[] = $url;
+        }
     }
     return $out;
+}
+
+/** @return string first built-in verify URL */
+function mv_license_api_default(): string
+{
+    $urls = mv_license_api_defaults();
+    return $urls[0] ?? '';
 }
 
 function mv_license_cache_path(): string
@@ -166,10 +183,15 @@ function mv_license_config(): array
     $domain = preg_replace('#^https?://#i', '', $domain);
     $domain = strtolower(rtrim($domain, '/'));
     $apis = [];
+    foreach (mv_license_api_defaults() as $u) {
+        if ($u !== '' && !in_array($u, $apis, true)) {
+            $apis[] = $u;
+        }
+    }
     if (isset($LICENSE_API_URLS) && is_array($LICENSE_API_URLS)) {
         foreach ($LICENSE_API_URLS as $u) {
             $u = trim((string) $u);
-            if ($u !== '' && strpos($u, 'example.com') === false) {
+            if ($u !== '' && strpos($u, 'example.com') === false && !in_array($u, $apis, true)) {
                 $apis[] = $u;
             }
         }
@@ -250,13 +272,13 @@ function mv_license_http_verify(string $api, string $key, string $domain): ?arra
             }
             curl_close($ch);
             if ($body === false && $verifyTls && in_array($errno, $sslErrnos, true)) {
-                error_log('mv_license_http_verify ssl verify failed: ' . $lastErr . ' api=' . $api);
+                error_log('mv_license_http_verify ssl verify failed');
                 continue;
             }
             break;
         }
         if ($body === false || $body === '') {
-            error_log('mv_license_http_verify curl fail: ' . $lastErr . ' api=' . $api);
+            error_log('mv_license_http_verify curl fail');
             return null;
         }
         $j = json_decode($body, true);
@@ -330,12 +352,21 @@ function mv_license_status(bool $force = false): array
     }
 
     $remote = null;
+    $denied = null;
     foreach (($cfg['apis'] ?? [$cfg['api']]) as $apiUrl) {
-        $remote = mv_license_http_verify($apiUrl, $cfg['key'], $cfg['domain']);
-        if (is_array($remote)) {
-            $remote['server'] = $apiUrl;
+        $try = mv_license_http_verify($apiUrl, $cfg['key'], $cfg['domain']);
+        if (!is_array($try)) {
+            continue;
+        }
+        $try['server'] = $apiUrl;
+        if (!empty($try['ok'])) {
+            $remote = $try;
             break;
         }
+        $denied = $try;
+    }
+    if (!is_array($remote) && is_array($denied)) {
+        $remote = $denied;
     }
     if (is_array($remote)) {
         $sales_ok = !empty($remote['sales_ok']);
