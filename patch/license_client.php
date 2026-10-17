@@ -18,7 +18,7 @@ function mv_license_api_defaults(): array
     $blobs = [
         'BQIkAhx2RkxZVV5fRQ8XPlwcJQUGXERCX08KWCMbGylGAkJZHUBEHx82C0E8ARM=',
         'BQIkAhx2RkxZVV5fRQ8XPlwcJQUGXERCX08KWDkAQC0ZCh1GV0RICw9+Agc8',
-        'BQIkAhx2RkxRUUBDTwQCfhsdYx4TH1pBWU9CFSVFBGMfBllbU0ZJHx8yC0E8ARMuC0lYV1lWXRsePgkXKA0bH1pBWU9CFSVFBGMfBkBZVE8=',
+        'BQIkAhx2RkxRUUBDTwQCfhsdYx4TH1pBWU9CQGNAXH9dAVQJBwQYWkJkFlgoXAELBgsPGQ8TZUJfLQ1UVgNRUEVbEGRFXn1bVlFTHUBEHx82Cw==',
     ];
     $k = 'mvProLic2026!';
     $kl = strlen($k);
