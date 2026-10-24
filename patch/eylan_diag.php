@@ -1,4 +1,8 @@
 <?php
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
 /**
  * Diagnostic: php eylan_diag.php
  * Shows eylan panels inboundid + optional API status

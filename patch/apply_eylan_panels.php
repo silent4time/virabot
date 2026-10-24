@@ -1,4 +1,8 @@
 <?php
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
 /**
  * Inject/update eylan createUser + DataUser in panels.php (v1.8.12)
  * Safe for other panel types. Idempotent.
