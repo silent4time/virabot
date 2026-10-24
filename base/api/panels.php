@@ -330,14 +330,20 @@ switch ($data['actions'] ?? '') {
         if (!empty($missing_fields)) {
             sendJsonResponse(false, "Missing required fields: " . implode(', ', $missing_fields), []);
         }
-        $panel = select("panel", "*", "id", $data['id'], "select");
+        $panel = select("marzban_panel", "*", "id", $data['id'], "select");
         if (!$panel) {
             sendJsonResponse(false, "panel not found", [], 200);
         }
         try {
-            $stmt = $pdo->prepare("DELETE FROM panel  WHERE id = :id");
-            $stmt->bindValue(":id", $data['id'], PDO::PARAM_INT);
-            $stmt->execute();
+            if (function_exists('virabot_delete_panel_cascade')) {
+                virabot_delete_panel_cascade($pdo, $panel);
+            } else {
+                $stmt = $pdo->prepare("DELETE FROM product WHERE Location = :loc");
+                $stmt->execute([':loc' => $panel['name_panel']]);
+                $stmt = $pdo->prepare("DELETE FROM marzban_panel WHERE id = :id");
+                $stmt->bindValue(":id", $data['id'], PDO::PARAM_INT);
+                $stmt->execute();
+            }
 
             sendJsonResponse(true, "panel delete successfully", [], 200);
 
