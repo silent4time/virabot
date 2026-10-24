@@ -43,10 +43,13 @@ if (is_array($keyboard_check) && preg_match('/[\x{600}-\x{6FF}\x{FB50}-\x{FDFF}]
     update("setting", "keyboardmain", $keyboardmain, null, null);
 }
 
-#-----------telegram_ip_ranges------------#
-if (!checktelegramip())
+#-----------webhook_authorization------------#
+// Same rule as patch/index.php: secret header first, Telegram IP list as fallback,
+// Bale only with a valid secret (fail-closed).
+$__vbPlatform = (isset($_GET['platform']) && $_GET['platform'] === 'bale') ? 'bale' : 'telegram';
+if (function_exists('checkWebhookAuthorized') ? !checkWebhookAuthorized($__vbPlatform) : !checktelegramip())
     die("Unauthorized access");
-#-----------end telegram_ip_ranges------------#
+#-----------end webhook_authorization------------#
 if (intval($from_id) == 0)
     return;
 #-------------Variable----------#

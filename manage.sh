@@ -845,7 +845,7 @@ apply_patch_files() {
     fi
   fi
 
-  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php; do
+  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php; do
     if [[ -f "${src_patch}/${f}" ]]; then
       cp -f "${src_patch}/${f}" "${target}/${f}"
     else
@@ -1075,7 +1075,7 @@ if [[ -n "$DOMAIN" ]]; then
     local url="$1" label="$2"
     local attempt result
     for attempt in 1 2 3 4 5; do
-      result="$(curl -s -F "url=${url}" "$3" || echo '{"ok":false}')"
+      result="$(curl -s -F "url=${url}" -F "secret_token=${WEBHOOK_SECRET}" "$3" || echo '{"ok":false}')"
       echo "$(date -Is) ${label} webhook attempt ${attempt}: ${result}" >> "$LOGFILE"
       if [[ "$result" == *'"ok":true'* ]]; then return 0; fi
       sleep 5
@@ -1083,7 +1083,7 @@ if [[ -n "$DOMAIN" ]]; then
     return 1
   }
   if [[ "$ENABLE_TELEGRAM" == "true" ]]; then
-    register_webhook "https://${DOMAIN}/index.php?secret=${WEBHOOK_SECRET}" "Telegram" \
+    register_webhook "https://${DOMAIN}/index.php" "Telegram" \
       "https://api.telegram.org/bot${TELEGRAM_TOKEN}/setWebhook"
   fi
   if [[ "$ENABLE_BALE" == "true" ]]; then
@@ -1157,13 +1157,13 @@ register_webhooks() {
   fi
   if [[ "$ENABLE_TELEGRAM" == "true" ]]; then
     local r
-    r="$(curl -s -F "url=https://${DOMAIN}/index.php?secret=${WEBHOOK_SECRET}" \
+    r="$(curl -s -F "url=https://${DOMAIN}/index.php" -F "secret_token=${WEBHOOK_SECRET}" \
       "https://api.telegram.org/bot${TELEGRAM_TOKEN}/setWebhook" || true)"
     info "Telegram webhook: $r"
   fi
   if [[ "$ENABLE_BALE" == "true" ]]; then
     local r
-    r="$(curl -s -F "url=https://${DOMAIN}/index.php?platform=bale&secret=${WEBHOOK_SECRET}" \
+    r="$(curl -s -F "url=https://${DOMAIN}/index.php?platform=bale&secret=${WEBHOOK_SECRET}" -F "secret_token=${WEBHOOK_SECRET}" \
       "https://tapi.bale.ai/bot${BALE_TOKEN}/setWebhook" || true)"
     info "Bale webhook: $r"
   fi
@@ -1313,7 +1313,7 @@ do_update() {
   fi
 
   info "Applying patch files..."
-  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php; do
+  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php; do
     if [[ -f "${src_patch}/${f}" ]]; then
       cp -f "${src_patch}/${f}" "${INSTALL_DIR}/${f}"
       ok "  $f"
@@ -1352,6 +1352,10 @@ do_update() {
   done
   if [[ -n "$panel_src" ]]; then
     mkdir -p "${INSTALL_DIR}/panel"
+    # Full web panel first (pages like product.php), then the overlay on top.
+    if [[ -f "$pkg/base/panel/index.php" ]]; then
+      cp -a "$pkg/base/panel/." "${INSTALL_DIR}/panel/"
+    fi
     cp -a "$panel_src/." "${INSTALL_DIR}/panel/"
     ok "  web panel design"
   else
@@ -1381,6 +1385,7 @@ do_update() {
   done
   if [[ -n "$api_src" && -d "${INSTALL_DIR}/api" ]]; then
     cp -f "$api_src/miniapp.php" "${INSTALL_DIR}/api/miniapp.php"
+    [[ -f "$api_src/panels.php" ]] && cp -f "$api_src/panels.php" "${INSTALL_DIR}/api/panels.php"
     ok "  mini app API"
   fi
   if [[ -f "$pkg/theme/virabot.css" ]]; then
@@ -1414,6 +1419,18 @@ try {
 
   info "Syncing database tables (no data loss)..."
   (cd "$INSTALL_DIR" && timeout 60 php table.php) 2>/dev/null || true
+
+  # 5.5.0: webhook auth is fail-closed; make sure a secret exists (old installs) and
+  # re-register webhooks once so Telegram sends it in the header.
+  if [[ -f "${INSTALL_DIR}/ensure_webhook_secret.php" ]]; then
+    info "Checking webhook secret..."
+    (cd "$INSTALL_DIR" && timeout 60 php ensure_webhook_secret.php --reregister) || warn "webhook secret check failed"
+    local newsec
+    newsec="$(grep -oE "WEBHOOK_SECRET_TOKEN *= *'[^']+'" "${INSTALL_DIR}/config.php" | sed -E "s/.*'([^']+)'/\1/" | head -1)"
+    if [[ -n "$newsec" && -f "${STATE_DIR}/tunnel.env" ]]; then
+      sed -i "s|^WEBHOOK_SECRET=.*|WEBHOOK_SECRET=\"${newsec}\"|" "${STATE_DIR}/tunnel.env" || true
+    fi
+  fi
 
   if [[ -f "${INSTALL_DIR}/apply_eylan_panels.php" ]]; then
     info "Applying Eylan panel hooks..."

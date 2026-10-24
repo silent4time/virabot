@@ -1,4 +1,23 @@
 <?php
+if (!function_exists('mv_secure_session')) {
+    function mv_secure_session(): void
+    {
+        if (session_status() !== PHP_SESSION_NONE) {
+            return;
+        }
+        $https = (!empty($_SERVER['HTTPS']) && $_SERVER['HTTPS'] !== 'off')
+            || (($_SERVER['HTTP_X_FORWARDED_PROTO'] ?? '') === 'https');
+        session_set_cookie_params([
+            'lifetime' => 0,
+            'path' => '/panel',
+            'secure' => $https,
+            'httponly' => true,
+            'samesite' => 'Strict',
+        ]);
+        session_start();
+    }
+}
+
 
 require __DIR__ . '/../../config.php';
 require __DIR__ . '/../../function.php';
@@ -29,8 +48,7 @@ function db_count(PDO $pdo, string $sql, array $params = []): int
 }
 function require_auth(): void
 {
-    if (session_status() === PHP_SESSION_NONE)
-        session_start();
+    mv_secure_session();
     global $pdo;
     if (empty($_SESSION['admin_user'])) {
         header('Location: login.php');
@@ -52,8 +70,7 @@ function require_auth(): void
 
 function csrf_token(): string
 {
-    if (session_status() === PHP_SESSION_NONE)
-        session_start();
+    mv_secure_session();
     if (empty($_SESSION['csrf'])) {
         $_SESSION['csrf'] = bin2hex(random_bytes(32));
     }
@@ -82,15 +99,13 @@ function csrf_check_get(): void
 
 function flash(string $key, string $msg): void
 {
-    if (session_status() === PHP_SESSION_NONE)
-        session_start();
+    mv_secure_session();
     $_SESSION["flash_{$key}"] = $msg;
 }
 
 function get_flash(string $key): ?string
 {
-    if (session_status() === PHP_SESSION_NONE)
-        session_start();
+    mv_secure_session();
     $msg = $_SESSION["flash_{$key}"] ?? null;
     unset($_SESSION["flash_{$key}"]);
     return $msg;
