@@ -1790,42 +1790,47 @@ function isClientIpInRange($clientIp, $lowerBound, $upperBound)
     return strcmp($clientPacked, $lowerPacked) >= 0 && strcmp($clientPacked, $upperPacked) <= 0;
 }
 
-// بررسی هدر secret_token که هنگام setWebhook تنظیم کرده‌اید.
-// هم تلگرام و هم بله این هدر را روی هر درخواست وبهوک ارسال می‌کنند.
-function checkWebhookSecret()
+// وضعیت مقدار محرمانه وبهوک (secret_token) در config.php
+function webhookSecretConfigured()
 {
     global $WEBHOOK_SECRET_TOKEN;
-    if (empty($WEBHOOK_SECRET_TOKEN) || $WEBHOOK_SECRET_TOKEN === '{WEBHOOK_SECRET_TOKEN}') {
-        // اگر مقدار محرمانه هنوز تنظیم نشده، این بررسی را فعال نمی‌کنیم
-        // (سازگاری با نصب‌های قبلی که فقط به checktelegramip() متکی بودند)
-        return false;
-    }
-    // نکته‌ی مهم که با تست روی سرور واقعی کشف شد: بله برخلاف تلگرام،
-    // هدرِ secret_token رو موقع تحویلِ واقعیِ وبهوک ارسال نمی‌کند؛ برای
-    // همین باید علاوه بر هدر، مقدارِ ?secret=... در خودِ URL وبهوک هم
-    // به عنوان راه جایگزین پذیرفته شود (هر دو پلتفرم را پوشش می‌دهد).
-    $received = $_GET['secret']
-        ?? $_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN']
-        ?? $_SERVER['HTTP_X_BALE_BOT_API_SECRET_TOKEN']
-        ?? '';
-    return hash_equals($WEBHOOK_SECRET_TOKEN, (string) $received);
+    $s = (string) ($WEBHOOK_SECRET_TOKEN ?? '');
+    return $s !== '' && strpos($s, '{') === false;
 }
 
-// تابع جایگزینِ checktelegramip() که برای هر دو پلتفرم کار می‌کند:
-// - برای تلگرام: هدر secret_token کافی است؛ اگر ست نشده بود، به عنوان
-//   fallback به فهرست IP رسمی تلگرام رجوع می‌شود.
-// - برای بله: تلگرام IP-range ندارد، پس فقط هدر secret_token پذیرفته می‌شود.
+// بررسی secret وبهوک.
+// - هدر X-Telegram-Bot-Api-Secret-Token همیشه اولویت دارد (در لاگ وب‌سرور ثبت نمی‌شود).
+// - بله هنگام تحویل وبهوک هدر را نمی‌فرستد؛ فقط برای بله ?secret= در URL پذیرفته می‌شود.
+// - اگر secret تنظیم نشده باشد نتیجه همیشه false است (fail-closed).
+function checkWebhookSecret($platform = 'telegram')
+{
+    global $WEBHOOK_SECRET_TOKEN;
+    if (!webhookSecretConfigured()) {
+        return false;
+    }
+    $header = $_SERVER['HTTP_X_TELEGRAM_BOT_API_SECRET_TOKEN']
+        ?? $_SERVER['HTTP_X_BALE_BOT_API_SECRET_TOKEN']
+        ?? null;
+    if (is_string($header) && $header !== '') {
+        return hash_equals((string) $WEBHOOK_SECRET_TOKEN, $header);
+    }
+    if ($platform === 'bale' && isset($_GET['secret']) && is_string($_GET['secret'])) {
+        return hash_equals((string) $WEBHOOK_SECRET_TOKEN, $_GET['secret']);
+    }
+    return false;
+}
+
+// مجوز درخواست وبهوک برای هر دو پلتفرم:
+// - تلگرام: secret در هدر؛ در غیر این صورت فقط IPهای رسمی تلگرام (سازگاری با وبهوک‌های قدیمی).
+// - بله: فقط secret معتبر. بدون secret درخواست رد می‌شود (fail-closed).
 function checkWebhookAuthorized($platform = 'telegram')
 {
-    if (checkWebhookSecret()) {
+    if (checkWebhookSecret($platform)) {
         return true;
     }
     if ($platform === 'bale') {
-        global $WEBHOOK_SECRET_TOKEN;
-        // اگر secret اصلاً در config تنظیم نشده، درخواست بله را مسدود نکن
-        // (در غیر این صورت وب‌هوک باید ?secret=... داشته باشد چون بله هدر secret نمی‌فرستد)
-        if (empty($WEBHOOK_SECRET_TOKEN) || $WEBHOOK_SECRET_TOKEN === '{WEBHOOK_SECRET_TOKEN}' || $WEBHOOK_SECRET_TOKEN === '{{WEBHOOK_SECRET}}') {
-            return true;
+        if (!webhookSecretConfigured()) {
+            error_log('Bale webhook rejected: WEBHOOK_SECRET_TOKEN is not set. Run: php ensure_webhook_secret.php');
         }
         return false;
     }
@@ -2475,4 +2480,52 @@ function bot_date($format = 'Y/m/d H:i:s', $timestamp = null, $digits = 'en')
         return jdate($format, $ts, '', getBotTimezone(), $tr);
     }
     return date($format, $ts);
+}
+
+/**
+ * Delete a panel (server) and every row that only makes sense while it exists:
+ * its products, panel-scoped discounts and manual-sell stock. Invoices are kept
+ * for accounting history. Returns the number of deleted products.
+ */
+function virabot_delete_panel_cascade(PDO $pdo, array $panel)
+{
+    $name = (string) ($panel['name_panel'] ?? '');
+    $code = (string) ($panel['code_panel'] ?? '');
+    $deletedProducts = 0;
+    $pdo->beginTransaction();
+    try {
+        if ($name !== '') {
+            $st = $pdo->prepare("DELETE FROM product WHERE Location = :loc");
+            $st->execute([':loc' => $name]);
+            $deletedProducts = $st->rowCount();
+        }
+        if ($code !== '') {
+            foreach ([['DiscountSell', 'code_panel'], ['manualsell', 'codepanel']] as $t) {
+                try {
+                    $st = $pdo->prepare("DELETE FROM `{$t[0]}` WHERE `{$t[1]}` = :code");
+                    $st->execute([':code' => $code]);
+                } catch (Throwable $e) {
+                    // optional table/column may be missing on old installs
+                }
+            }
+        }
+        $st = $pdo->prepare("DELETE FROM marzban_panel WHERE id = :id");
+        $st->execute([':id' => (int) ($panel['id'] ?? 0)]);
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        throw $e;
+    }
+    return $deletedProducts;
+}
+
+/**
+ * SQL fragment restricting product.Location to panels that still exist and are
+ * active ("/all" products stay visible). Used by the tariff list.
+ */
+function virabot_live_panel_location_sql($alias = 'product')
+{
+    return "({$alias}.Location = '/all' OR {$alias}.Location IN (SELECT mp.name_panel COLLATE utf8mb4_unicode_ci FROM marzban_panel mp WHERE mp.status = 'active'))";
 }

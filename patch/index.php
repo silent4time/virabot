@@ -57,6 +57,14 @@ if (!checkWebhookAuthorized($CURRENT_PLATFORM))
 #-----------end webhook_authorization------------#
 if (intval($from_id) == 0)
     return;
+// Header/label cells in inline keyboards carry a callback but do nothing;
+// answer them right away so the client stops showing the loading spinner.
+if (isset($datain) && in_array($datain, ['LastTraffic', 'RemainingVolume', 'action', 'actionnode', 'actions', 'adminlist', 'carttocart', 'confirmpaid', 'copycart', 'namenode', 'statuscategorytime', 'stautsrolee', 'subjectde', 'tarifflist_info'], true)) {
+    if (!empty($callback_query_id)) {
+        telegram('answerCallbackQuery', ['callback_query_id' => $callback_query_id]);
+    }
+    return;
+}
 #-------------Variable----------#
 $users_ids = select("user", "id", null, null, "FETCH_COLUMN");
 $otherreport = select("topicid", "idreport", "report", "otherreport", "select")['idreport'];
@@ -6198,11 +6206,11 @@ if (preg_match('/^sendresidcart-(.*)/', $datain, $dataget)) {
     $agentUser = (isset($user['agent']) && $user['agent'] !== '') ? $user['agent'] : 'f';
     $productsTariff = [];
     try {
-        $stmtTariff = $pdo->prepare("SELECT name_product, price_product, Volume_constraint, Service_time, Location, max_users, category, one_buy_status FROM product WHERE agent = ? AND (one_buy_status = '0' OR one_buy_status IS NULL OR one_buy_status = '0') ORDER BY Location ASC, CAST(price_product AS DECIMAL(15,2)) ASC");
+        $stmtTariff = $pdo->prepare("SELECT name_product, price_product, Volume_constraint, Service_time, Location, max_users, category, one_buy_status FROM product WHERE agent = ? AND " . virabot_live_panel_location_sql() . " AND (one_buy_status = '0' OR one_buy_status IS NULL) ORDER BY Location ASC, CAST(price_product AS DECIMAL(15,2)) ASC");
         $stmtTariff->execute([$agentUser]);
         $productsTariff = $stmtTariff->fetchAll(PDO::FETCH_ASSOC);
         if (empty($productsTariff)) {
-            $productsTariff = $pdo->query("SELECT name_product, price_product, Volume_constraint, Service_time, Location, max_users, category, one_buy_status FROM product WHERE (one_buy_status = '0' OR one_buy_status IS NULL OR one_buy_status = '0') ORDER BY Location ASC, CAST(price_product AS DECIMAL(15,2)) ASC")->fetchAll(PDO::FETCH_ASSOC);
+            $productsTariff = $pdo->query("SELECT name_product, price_product, Volume_constraint, Service_time, Location, max_users, category, one_buy_status FROM product WHERE agent = 'f' AND " . virabot_live_panel_location_sql() . " AND (one_buy_status = '0' OR one_buy_status IS NULL) ORDER BY Location ASC, CAST(price_product AS DECIMAL(15,2)) ASC")->fetchAll(PDO::FETCH_ASSOC);
         }
         // سورت قطعی داخل هر پنل بر اساس قیمت عددی
         usort($productsTariff, function ($a, $b) {
