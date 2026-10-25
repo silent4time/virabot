@@ -1,8 +1,11 @@
 <?php
-session_start();
-
 require_once __DIR__ . '/inc/config.php';
 require_once __DIR__ . '/inc/icons.php';
+if (function_exists('mv_secure_session')) {
+  mv_secure_session();
+} elseif (session_status() === PHP_SESSION_NONE) {
+  session_start();
+}
 
 if (!empty($_SESSION['admin_user'])) {
   header('Location: index.php');
@@ -17,39 +20,38 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
 
   if ($username === '' || $password === '') {
     $error = $textbotlang['panel']['loginEnterCredentials'];
-  } elseif (!check_login_rate($ip)) {
+  } elseif (!hash_equals($_SESSION['csrf'] ?? '', (string) ($_POST['_csrf'] ?? ''))) {
+    $error = $textbotlang['panel']['configInvalidRequest'];
+  } elseif (!check_login_rate($ip) || !check_login_rate('user:' . mb_strtolower($username))) {
 
     $error = $textbotlang['panel']['loginTooManyAttempts'];
-    error_log("Login rate limit hit for IP: $ip username: $username");
+    error_log("Login rate limit hit for IP: $ip");
   } else {
 
     $admin = select("admin", "*", "username", $username, "select");
 
-    $dummyHash = '$2y$10$dummy.hash.for.timing.attack.prevention.xxxxxxxxxxxxxxxx';
-    $storedHash = $admin ? $admin['password'] : $dummyHash;
-
+    // Constant-time check. bcrypt/argon hashes go through password_verify;
+    // a legacy plaintext value is compared with hash_equals and rehashed below.
+    $dummyHash = '$2y$12$C6UzMDM.H6dfI/f/IKcEeO6wYJwT5DkJv6ZQHq1S7uY6t1VfQ9n1W';
+    $storedHash = $admin ? (string) $admin['password'] : $dummyHash;
+    $info = password_get_info($storedHash);
+    $isHashed = !empty($info['algo']);
     $isCorrect = false;
-    if (password_verify($password, $storedHash)) {
-      $isCorrect = true;
-    } elseif ($admin && !password_needs_rehash($storedHash, PASSWORD_BCRYPT)) {
-
-      if ($password === $storedHash) {
-        $isCorrect = true;
-      }
-    } elseif ($admin) {
-
-      if ($password === $admin['password']) {
-        $isCorrect = true;
-      }
+    if ($isHashed) {
+      $isCorrect = password_verify($password, $storedHash);
+    } else {
+      password_verify($password, $dummyHash); // keep timing similar
+      $isCorrect = $admin && hash_equals($storedHash, (string) $password);
     }
 
     if ($isCorrect && $admin) {
 
-      if (!str_starts_with($admin['password'], '$2')) {
+      if (!$isHashed || password_needs_rehash($storedHash, PASSWORD_BCRYPT, ['cost' => 12])) {
         $hash = password_hash($password, PASSWORD_BCRYPT, ['cost' => 12]);
         update("admin", "password", $hash, "username", $username);
       }
       clear_login_rate($ip);
+      clear_login_rate('user:' . mb_strtolower($username));
       session_regenerate_id(true);
       $_SESSION['admin_user'] = $admin['username'];
       $_SESSION['login_time'] = time();
@@ -58,7 +60,7 @@ if ($_SERVER['REQUEST_METHOD'] === 'POST') {
       exit;
     } else {
       $error = $textbotlang['panel']['loginWrongCredentials'];
-      error_log("Failed login for username: $username from IP: $ip");
+      error_log("Failed panel login from IP: $ip");
     }
   }
 }

@@ -11,13 +11,27 @@ function panel_backup_path(): string
     return $dir . '/backup_' . date('Y-m-d_His') . '.sql';
 }
 
+function panel_mysql_cnf(string $dbhost, string $dbuser, string $dbpass): string
+{
+    // Option-file values: wrap in double quotes and escape \\ and " so passwords
+    // with #, ;, quotes or backslashes survive. Created 0600 before any write.
+    $q = function (string $v): string {
+        return '"' . str_replace(['\\', '"', "\n", "\r"], ['\\\\', '\\"', '', ''], $v) . '"';
+    };
+    $dir = dirname(panel_backup_path());
+    $cnf = tempnam($dir, 'cnf_');
+    $old = umask(0077);
+    chmod($cnf, 0600);
+    file_put_contents($cnf, "[client]\nhost=" . $q($dbhost) . "\nuser=" . $q($dbuser) . "\npassword=" . $q($dbpass) . "\n");
+    umask($old);
+    return $cnf;
+}
+
 function panel_sql_dump(PDO $pdo, string $dbname, string $dbhost, string $dbuser, string $dbpass, string $outfile): ?string
 {
     $mysqldump = trim((string) shell_exec('command -v mysqldump 2>/dev/null'));
     if ($mysqldump !== '') {
-        $cnf = $outfile . '.cnf';
-        file_put_contents($cnf, "[client]\nhost={$dbhost}\nuser={$dbuser}\npassword=\"{$dbpass}\"\n");
-        chmod($cnf, 0600);
+        $cnf = panel_mysql_cnf($dbhost, $dbuser, $dbpass);
         $cmd = escapeshellcmd($mysqldump)
             . ' --defaults-extra-file=' . escapeshellarg($cnf)
             . ' --no-tablespaces --single-transaction --routines --triggers '
@@ -45,14 +59,15 @@ function panel_sql_dump(PDO $pdo, string $dbname, string $dbhost, string $dbuser
     $tables = $pdo->query('SHOW TABLES')->fetchAll(PDO::FETCH_COLUMN);
     foreach ($tables as $table) {
         $create = $pdo->query('SHOW CREATE TABLE `' . str_replace('`', '``', $table) . '`')->fetch(PDO::FETCH_NUM);
-        fwrite($fh, "DROP TABLE IF EXISTS `{$table}`;\n" . $create[1] . ";\n\n");
+        $qt = str_replace('`', '``', $table);
+        fwrite($fh, "DROP TABLE IF EXISTS `{$qt}`;\n" . $create[1] . ";\n\n");
         $rows = $pdo->query('SELECT * FROM `' . str_replace('`', '``', $table) . '`', PDO::FETCH_ASSOC);
         foreach ($rows as $row) {
             $cols = array_map(fn($c) => '`' . str_replace('`', '``', $c) . '`', array_keys($row));
             $vals = array_map(function ($v) use ($pdo) {
                 return $v === null ? 'NULL' : $pdo->quote($v);
             }, array_values($row));
-            fwrite($fh, 'INSERT INTO `' . $table . '` (' . implode(',', $cols) . ') VALUES (' . implode(',', $vals) . ");\n");
+            fwrite($fh, 'INSERT INTO `' . $qt . '` (' . implode(',', $cols) . ') VALUES (' . implode(',', $vals) . ");\n");
         }
         fwrite($fh, "\n");
     }
@@ -67,18 +82,17 @@ function panel_sql_restore(string $file, string $dbname, string $dbhost, string 
     if ($mysql === '') {
         return 'mysql client is not installed';
     }
-    $cnf = $file . '.cnf';
-    file_put_contents($cnf, "[client]\nhost={$dbhost}\nuser={$dbuser}\npassword=\"{$dbpass}\"\n");
-    chmod($cnf, 0600);
+    $cnf = panel_mysql_cnf($dbhost, $dbuser, $dbpass);
+    $errFile = $cnf . '.err';
     $cmd = escapeshellcmd($mysql)
         . ' --defaults-extra-file=' . escapeshellarg($cnf)
         . ' ' . escapeshellarg($dbname)
         . ' < ' . escapeshellarg($file)
-        . ' 2> ' . escapeshellarg($file . '.err');
+        . ' 2> ' . escapeshellarg($errFile);
     exec($cmd, $out, $code);
     @unlink($cnf);
-    $err = is_file($file . '.err') ? trim(file_get_contents($file . '.err')) : '';
-    @unlink($file . '.err');
+    $err = is_file($errFile) ? trim(file_get_contents($errFile)) : '';
+    @unlink($errFile);
     return $code === 0 ? null : ($err !== '' ? $err : "mysql exit={$code}");
 }
 

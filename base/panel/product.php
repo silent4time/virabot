@@ -65,6 +65,7 @@ try {
 } catch (Exception $e) {
 }
 $products = db_fetchAll($pdo, "SELECT * FROM product ORDER BY id");
+$livePanelNames = array_map(function ($r) { return (string) $r['name_panel']; }, $panels);
 
 $pageTitle = $textbotlang['panel']['productsTitle'];
 $pageLede = $textbotlang['panel']['productsSubtitle'];
@@ -126,7 +127,7 @@ include __DIR__ . '/inc/layout_head.php';
               <td class="cn cs"><?= number_format((int) ($p['price_product'] ?? 0)) ?> <span class="cf"><?= $textbotlang['panel']['productFieldServiceDays'] ?></span></td>
               <td class="cn"><?= htmlspecialchars($p['Volume_constraint'] ?? '—') ?> <span class="cf">GB</span></td>
               <td class="cn"><?= htmlspecialchars($p['Service_time'] ?? '—') ?> <span class="cf"><?= $textbotlang['panel']['productFieldPriceToman'] ?></span></td>
-              <td class="cf"><?= htmlspecialchars(trunc($p['Location'] ?? '—', 16)) ?></td>
+              <td class="cf"><?= htmlspecialchars(trunc($p['Location'] ?? '—', 16)) ?><?php if (($p['Location'] ?? '') !== '/all' && !in_array((string) ($p['Location'] ?? ''), $livePanelNames, true)): ?> <span title="پنل این محصول حذف شده است" style="color:#c0392b">⚠️ پنل حذف‌شده</span><?php endif; ?></td>
               <td><?php if (!empty($p['category'])): ?><span
                     class="tag tag-info"><?= htmlspecialchars($p['category']) ?></span><?php else: ?><span
                     class="cf">—</span><?php endif; ?></td>

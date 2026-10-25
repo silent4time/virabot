@@ -1451,7 +1451,7 @@ elseif ($datain == "systemsms") {
         $timedaystamp = intval($userdata['daynoyuse']) * 86400;
         $timenouser = time() - $timedaystamp;
         if ($agent == "all") {
-            $stmt = $pdo->prepare("SELECT id FROM user  WHERE last_message_time < $timenouser");
+            $stmt = $pdo->prepare("SELECT id FROM user  WHERE last_message_time < " . (int) $timenouser);
             $stmt->execute();
             $userslist = json_encode($stmt->fetchAll());
         } else {
@@ -3634,15 +3634,15 @@ $cfgBody2 = preg_replace(
             $query_where = null;
             ;
         } elseif ($userdata['typecustomer'] == "customer") {
-            $query_where = " WHERE u.agent =  '{$userdata['agent']}' AND EXISTS ( SELECT 1 FROM invoice i WHERE i.id_user = u.id);";
+            $query_where = " WHERE u.agent = " . $pdo->quote((string) $userdata['agent']) . " AND EXISTS ( SELECT 1 FROM invoice i WHERE i.id_user = u.id);";
         } elseif ($userdata['typecustomer'] == "notcustomer") {
-            $query_where = " WHERE u.agent =  '{$userdata['agent']}' AND NOT EXISTS ( SELECT 1 FROM invoice i WHERE i.id_user = u.id);";
+            $query_where = " WHERE u.agent = " . $pdo->quote((string) $userdata['agent']) . " AND NOT EXISTS ( SELECT 1 FROM invoice i WHERE i.id_user = u.id);";
         }
     }
     $stmt = $pdo->prepare("SELECT u.id FROM user u " . $query_where);
     $stmt->execute();
     $Balance_user = $stmt->fetchAll();
-    $stmt = $pdo->prepare("UPDATE user as u SET  Balance = Balance + {$userdata['price']} " . $query_where);
+    $stmt = $pdo->prepare("UPDATE user as u SET  Balance = Balance + " . (0 + (is_numeric($userdata['price']) ? $userdata['price'] : 0)) . " " . $query_where);
     $stmt->execute();
     step('home', $from_id);
     if ($text == "1") {
@@ -4503,11 +4503,20 @@ $cfgBody2 = preg_replace(
     step('confirmremovepanel', $from_id);
 } elseif ($user['step'] == "confirmremovepanel") {
     if ($text == $textbotlang['keyboard']['confirm']) {
-        sendmessage($from_id, $textbotlang['Admin']['managepanel']['removedPanel'], $keyboardadmin, 'HTML');
         $marzban = select("marzban_panel", "*", "name_panel", $user['Processing_value'], "select");
-        $stmt = $pdo->prepare("DELETE FROM marzban_panel WHERE name_panel = :name_panel");
-        $stmt->bindParam(':name_panel', $user['Processing_value'], PDO::PARAM_STR);
-        $stmt->execute();
+        if ($marzban) {
+            try {
+                virabot_delete_panel_cascade($pdo, $marzban);
+                sendmessage($from_id, $textbotlang['Admin']['managepanel']['removedPanel'], $keyboardadmin, 'HTML');
+            } catch (Throwable $e) {
+                error_log('delete panel: ' . $e->getMessage());
+                sendmessage($from_id, "❌ حذف پنل با خطا مواجه شد.", $keyboardadmin, 'HTML');
+            }
+        } else {
+            sendmessage($from_id, "❌ پنل پیدا نشد.", $keyboardadmin, 'HTML');
+        }
+    } else {
+        sendmessage($from_id, '↩️ حذف پنل لغو شد.', $keyboardadmin, 'HTML');
     }
     step('home', $from_id);
 } elseif ($text == $textbotlang['Admin']['btnKeyboard']['manageUser'] || $datain == "backlistuser") {
@@ -6386,7 +6395,7 @@ $cfgBody2 = preg_replace(
         sendmessage($from_id, $textbotlang['Admin']['adminphp']['err_notfound'], null, 'HTML');
         return;
     }
-    $spreadsheet = new Spreadsheet();
+    $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
     $sheet = $spreadsheet->getActiveSheet();
 
     $sql = "SELECT * FROM user";
@@ -6410,7 +6419,7 @@ $cfgBody2 = preg_replace(
     }
     $date = date("Y-m-d");
     $filename = "users_{$date}.xlsx";
-    $writer = new Xlsx($spreadsheet);
+    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
     $writer->save($filename);
     sendDocument($from_id, $filename, $textbotlang['Admin']['adminphp']['btn_user_4']);
     unlink($filename);
@@ -6420,7 +6429,7 @@ $cfgBody2 = preg_replace(
         sendmessage($from_id, $textbotlang['Admin']['adminphp']['err_notfound'], null, 'HTML');
         return;
     }
-    $spreadsheet = new Spreadsheet();
+    $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
     $sheet = $spreadsheet->getActiveSheet();
 
     $sql = "SELECT * FROM invoice";
@@ -6444,7 +6453,7 @@ $cfgBody2 = preg_replace(
     }
     $date = date("Y-m-d");
     $filename = "invoice_{$date}.xlsx";
-    $writer = new Xlsx($spreadsheet);
+    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
     $writer->save($filename);
     sendDocument($from_id, $filename, $textbotlang['Admin']['adminphp']['btn_user_order']);
     unlink($filename);
@@ -6454,7 +6463,7 @@ $cfgBody2 = preg_replace(
         sendmessage($from_id, $textbotlang['Admin']['adminphp']['err_notfound'], null, 'HTML');
         return;
     }
-    $spreadsheet = new Spreadsheet();
+    $spreadsheet = new \PhpOffice\PhpSpreadsheet\Spreadsheet();
     $sheet = $spreadsheet->getActiveSheet();
 
     $sql = "SELECT * FROM Payment_report";
@@ -6478,7 +6487,7 @@ $cfgBody2 = preg_replace(
     }
     $date = date("Y-m-d");
     $filename = "Payment_report_{$date}.xlsx";
-    $writer = new Xlsx($spreadsheet);
+    $writer = new \PhpOffice\PhpSpreadsheet\Writer\Xlsx($spreadsheet);
     $writer->save($filename);
     sendDocument($from_id, $filename, $textbotlang['Admin']['adminphp']['btn_user_payment']);
     unlink($filename);
@@ -6766,9 +6775,13 @@ if ($datain == "settimecornremove" && $adminrulecheck['rule'] == "administrator"
     outtypepanel($typepanel['type'], $textbotlang['Admin']['algorithmExtend']['saveData']);
     step('home', $from_id);
 } elseif ($text == "/token") {
-    $secret_key = select("admin", "*", "id_admin", $from_id, "select");
-    $secret_key = base64_encode($secret_key['password']);
-    sendmessage($from_id, "<code>$secret_key</code>", null, 'HTML');
+    // Never expose the admin password hash; show (or create) the API token instead.
+    $token = is_file('api/hash.txt') ? trim((string) file_get_contents('api/hash.txt')) : '';
+    if (!preg_match('/^[0-9a-f]{32,}$/', $token)) {
+        $token = bin2hex(random_bytes(16));
+        file_put_contents('api/hash.txt', $token);
+    }
+    sendmessage($from_id, sprintf($textbotlang['Admin']['adminphp']['btn_token_api'], $token), null, 'HTML');
 } elseif ($text == "/token2") {
     $token = bin2hex(random_bytes(16));
     file_put_contents('api/hash.txt', $token);

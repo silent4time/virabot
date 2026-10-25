@@ -1,4 +1,8 @@
 <?php
+if (PHP_SAPI !== 'cli') {
+    http_response_code(404);
+    exit;
+}
 /**
  * SilentSell — bug fixes for upstream files (panels.php, mikrotik.php,
  * IBSng library, config.php). Idempotent: every fix is applied only when its

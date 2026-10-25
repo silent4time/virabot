@@ -10,7 +10,7 @@ ini_set('error_log', 'error_log');
 
 $headrs = getallheaders();
 $setting = select("setting", "*");
-if(!isset($headrs['Token']) or $APIKEY != $headrs['Token']){
+if(!isset($headrs['Token']) || !hash_equals((string) $APIKEY, (string) $headrs['Token'])){
     http_response_code(403);
     echo json_encode(array(
         'status' => false,
