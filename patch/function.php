@@ -2529,3 +2529,45 @@ function virabot_live_panel_location_sql($alias = 'product')
 {
     return "({$alias}.Location = '/all' OR {$alias}.Location IN (SELECT mp.name_panel COLLATE utf8mb4_unicode_ci FROM marzban_panel mp WHERE mp.status = 'active'))";
 }
+
+/**
+ * Virabot 5.5.2: serialize admin decisions on one payment (confirm / reject /
+ * add-balance) so two admins pressing at the same moment can never process it
+ * twice. Uses a MariaDB/MySQL named lock (no new payment_Status value); the
+ * lock is released automatically at the end of the request. The caller must
+ * re-read Payment_report AFTER taking the lock.
+ */
+function virabot_payment_lock($order_id, $timeout = 10)
+{
+    global $pdo;
+    static $held = [];
+    $order_id = (string) $order_id;
+    if (isset($held[$order_id])) {
+        return true;
+    }
+    if (!($pdo instanceof PDO)) {
+        return false;
+    }
+    try {
+        $stmt = $pdo->prepare("SELECT GET_LOCK(CONCAT('vbpay_', MD5(CONCAT(IFNULL(DATABASE(), ''), ':', ?))), ?)");
+        $stmt->execute([$order_id, (int) $timeout]);
+        if ((string) $stmt->fetchColumn() !== '1') {
+            return false;
+        }
+    } catch (Throwable $e) {
+        error_log('virabot_payment_lock: ' . $e->getMessage());
+        return false;
+    }
+    $held[$order_id] = true;
+    register_shutdown_function(function () use ($order_id) {
+        global $pdo;
+        try {
+            if ($pdo instanceof PDO) {
+                $stmt = $pdo->prepare("SELECT RELEASE_LOCK(CONCAT('vbpay_', MD5(CONCAT(IFNULL(DATABASE(), ''), ':', ?))))");
+                $stmt->execute([$order_id]);
+            }
+        } catch (Throwable $e) {
+        }
+    });
+    return true;
+}
