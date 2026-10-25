@@ -19,7 +19,7 @@
 
 <p align="center">
   <a href="https://github.com/silent4time/virabot/blob/main/CHANGELOG.md"><img src="docs/btn/log.png" alt="تغییرات" height="36"></a>
-  <a href="https://github.com/silent4time/virabot/releases/tag/v5.5.0"><img src="docs/btn/rel.png" alt="ریلیز" height="36"></a>
+  <a href="https://github.com/silent4time/virabot/releases"><img src="docs/btn/rel.png" alt="ریلیز" height="36"></a>
   <a href="https://github.com/silent4time/virabot/raw/main/docs/virabot-guide.pdf"><img src="docs/btn/pdf.png" alt="راهنمای مصور" height="36"></a>
 </p>
 
@@ -287,7 +287,7 @@ USDT / TON روی شبکه BEP20:
 
 <p align="center">
   <a href="https://github.com/silent4time/virabot/blob/main/CHANGELOG.md"><img src="docs/btn/log-en.png" alt="Changelog" height="36"></a>
-  <a href="https://github.com/silent4time/virabot/releases/tag/v5.5.0"><img src="docs/btn/rel-en.png" alt="Release" height="36"></a>
+  <a href="https://github.com/silent4time/virabot/releases"><img src="docs/btn/rel-en.png" alt="Release" height="36"></a>
   <a href="https://github.com/silent4time/virabot/raw/main/docs/virabot-guide.pdf"><img src="docs/btn/pdf-en.png" alt="Guide" height="36"></a>
 </p>
 

@@ -1172,6 +1172,50 @@ register_webhooks() {
 # ===========================================================================
 #  ۲) آپدیت
 # ===========================================================================
+# Refresh the management script's own source tree (manage.sh, install.sh,
+# VERSION, patch/, base/ ...) from the update package, so "Script version"
+# and the `virabot` command follow the installed bot version.
+# The new tree is staged next to the old one and swapped in with mv; the
+# running bash keeps reading the old (unlinked) manage.sh, so this is safe.
+sync_script_source() {
+  local pkg="$1"
+  local src="/opt/${PROJECT_NAME}-src"
+  if [[ -n "${SCRIPT_DIR:-}" && -f "${SCRIPT_DIR}/manage.sh" && -d "${SCRIPT_DIR}/patch" ]]; then
+    src="$SCRIPT_DIR"
+  fi
+  [[ -d "$pkg" && -f "$pkg/manage.sh" && -f "$pkg/patch/botapi.php" ]] || { warn "Script source not refreshed (package incomplete)."; return 0; }
+  grep -q 'PROJECT_NAME="virabot"' "$pkg/manage.sh" || { warn "Script source not refreshed (not a Virabot package)."; return 0; }
+  bash -n "$pkg/manage.sh" 2>/dev/null || { warn "Script source not refreshed (new manage.sh has syntax errors)."; return 0; }
+  if [[ -d "$src/.git" ]]; then
+    warn "Script source $src is a git checkout; run 'git -C $src pull' to refresh it."
+    return 0
+  fi
+  local parent stage old
+  parent="$(dirname "$src")"
+  mkdir -p "$parent"
+  stage="$(mktemp -d "${parent}/.${PROJECT_NAME}-src.new.XXXXXX")" || { warn "Script source not refreshed (mktemp failed)."; return 0; }
+  if ! cp -a "$pkg"/. "$stage/"; then
+    rm -rf "$stage"; warn "Script source not refreshed (copy failed)."; return 0
+  fi
+  rm -rf "$stage/.git"
+  chmod 755 "$stage"
+  chmod +x "$stage/manage.sh" "$stage/install.sh" 2>/dev/null || true
+  old="${parent}/.${PROJECT_NAME}-src.old.$$"
+  if [[ -e "$src" ]]; then
+    mv "$src" "$old" || { rm -rf "$stage"; warn "Script source not refreshed (rename failed)."; return 0; }
+  fi
+  if mv "$stage" "$src"; then
+    rm -rf "$old"
+  else
+    [[ -e "$old" ]] && mv "$old" "$src"
+    rm -rf "$stage"; warn "Script source not refreshed (swap failed)."; return 0
+  fi
+  ln -sf "$src/manage.sh" "/usr/local/bin/${PROJECT_NAME}" 2>/dev/null || true
+  SCRIPT_DIR="$src"
+  cd "$src" 2>/dev/null || true
+  ok "Management script updated: v$(version_of "$src") ($src)"
+}
+
 do_update() {
   echo ""
   if has_legacy; then
@@ -1477,6 +1521,7 @@ try {
 
   newv="$(version_of "$INSTALL_DIR")"
   save_state
+  sync_script_source "$pkg"
   rm -rf "$tmp"
   cleanup_stale_install_dirs "$INSTALL_DIR"
   ok "Update done: v${current} -> v${newv}"

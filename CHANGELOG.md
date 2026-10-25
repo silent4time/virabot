@@ -1,5 +1,12 @@
 # ویرابات (Virabot) — Changelog
 
+## v5.5.1 (2026-10-25)
+
+### به‌روزرسانی خودِ اسکریپت مدیریت
+- رفع مشکل: آپدیت (`virabot` → Update) فقط ربات را در `/home/virabot` به‌روز می‌کرد و سورس اسکریپت در `/opt/virabot-src` (که `/usr/local/bin/virabot` به آن لینک است و «Script version» از `VERSION` همان‌جا خوانده می‌شود) قدیمی می‌ماند.
+- `manage.sh`: تابع جدید `sync_script_source` بعد از آپدیت موفق، کل بسته (manage.sh، install.sh، VERSION، patch/، base/ …) را در پوشهٔ موقت کنار `/opt/virabot-src` کپی و با `mv` جایگزین می‌کند (اتمیک، با بررسی `bash -n` و برگشت در صورت خطا) و لینک `/usr/local/bin/virabot` را دوباره می‌سازد.
+- `install.sh`: اگر فایل zip محلی نباشد، ابتدا آرشیو سورس شاخهٔ main از codeload دانلود می‌شود؛ دیگر به به‌روز بودن `virabot-latest.zip` در ریپو وابسته نیست (zip و raw به‌عنوان پشتیبان باقی‌اند). متغیرهای `REPO_BRANCH` و `SKIP_CODELOAD` اضافه شد.
+
 ## v5.5.0 (2026-10-24)
 
 ### رفع باگ تعرفه و حذف پنل
