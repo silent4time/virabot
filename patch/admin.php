@@ -3210,6 +3210,15 @@ $cfgBody2 = preg_replace(
     sendmessage($from_id, $textbotlang['users']['selectoption'], $supportcenter, 'HTML');
 } elseif (preg_match('/Confirm_pay_(\w+)/', $datain, $dataget) && ($adminrulecheck['rule'] == "administrator" || $adminrulecheck['rule'] == "Seller")) {
     $order_id = $dataget[1];
+    if (!virabot_payment_lock($order_id)) {
+        telegram('answerCallbackQuery', array(
+            'callback_query_id' => $callback_query_id,
+            'text' => $textbotlang['Admin']['Payment']['reviewedPayment'],
+            'show_alert' => true,
+            'cache_time' => 5,
+        ));
+        return;
+    }
     $Payment_report = select("Payment_report", "*", "id_order", $order_id, "select");
     $Confirm_pay = json_encode([
         'inline_keyboard' => [
@@ -3279,6 +3288,15 @@ $cfgBody2 = preg_replace(
     update("user", "Processing_value_four", "none", "id", $Balance_id['id']);
 } elseif (preg_match('/reject_pay_(\w+)/', $datain, $datagetr) && ($adminrulecheck['rule'] == "administrator" || $adminrulecheck['rule'] == "Seller")) {
     $id_order = $datagetr[1];
+    if (!virabot_payment_lock($id_order)) {
+        telegram('answerCallbackQuery', array(
+            'callback_query_id' => $callback_query_id,
+            'text' => $textbotlang['Admin']['Payment']['reviewedPayment'],
+            'show_alert' => true,
+            'cache_time' => 5,
+        ));
+        return;
+    }
     $Payment_report = select("Payment_report", "*", "id_order", $id_order, "select");
     if ($Payment_report == false) {
         telegram('answerCallbackQuery', array(
@@ -5686,6 +5704,15 @@ $cfgBody2 = preg_replace(
     Editmessagetext($from_id, $message_id, $textbotlang['Admin']['Status']['cardStatusOnPv'], null);
 } elseif (preg_match('/addbalamceuser_(\w+)/', $datain, $datagetr) && ($adminrulecheck['rule'] == "administrator" || $adminrulecheck['rule'] == "Seller")) {
     $id_order = $datagetr[1];
+    if (!virabot_payment_lock($id_order)) {
+        telegram('answerCallbackQuery', array(
+            'callback_query_id' => $callback_query_id,
+            'text' => $textbotlang['Admin']['Payment']['reviewedPayment'],
+            'show_alert' => true,
+            'cache_time' => 5,
+        ));
+        return;
+    }
     $Payment_report = select("Payment_report", "*", "id_order", $id_order, "select");
     update("user", "Processing_value", $id_order, "id", $from_id);
     if ($Payment_report['payment_Status'] == "paid" || $Payment_report['payment_Status'] == "reject") {
