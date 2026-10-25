@@ -1240,7 +1240,27 @@ do_update() {
     fi
   fi
 
-  # اولویت ۲: دانلود virabot-latest.zip از GitHub (ریشه ریپو)
+  # اولویت ۲: آرشیو سورس همان شاخه از GitHub (همیشه با آخرین کد هم‌خوان است)
+  if [[ -z "$src_patch" ]]; then
+    local gh_src_url="https://codeload.github.com/silent4time/${PROJECT_NAME}/zip/refs/heads/${GITHUB_BRANCH}"
+    info "Downloading source archive (${GITHUB_BRANCH}) from GitHub..."
+    mkdir -p "$tmp/srcout"
+    if safe_curl "$gh_src_url" -o "$tmp/src.zip" 2>/dev/null && unzip -qo "$tmp/src.zip" -d "$tmp/srcout" 2>/dev/null; then
+      local srcroot
+      for srcroot in "$tmp"/srcout/*/; do
+        if [[ -d "${srcroot}patch" && -d "${srcroot}base" ]]; then
+          src_patch="${srcroot%/}/patch"
+          [[ -f "${srcroot}VERSION" ]] && cp -f "${srcroot}VERSION" "$tmp/VERSION" || true
+          ok "Update package (source archive) downloaded from GitHub."
+          break
+        fi
+      done
+    else
+      warn "Could not download source archive from GitHub."
+    fi
+  fi
+
+  # اولویت ۳: دانلود virabot-latest.zip از GitHub (ریشه ریپو)
   if [[ -z "$src_patch" ]]; then
     local gh_zip_url="https://raw.githubusercontent.com/silent4time/${PROJECT_NAME}/${GITHUB_BRANCH}/${ZIP_NAME}"
     local gh_zip_url2="https://github.com/silent4time/${PROJECT_NAME}/raw/${GITHUB_BRANCH}/${ZIP_NAME}"
@@ -1279,7 +1299,7 @@ do_update() {
     fi
   fi
 
-  # اولویت ۳: کلون ریپو (اگر پوشه patch روی گیت‌هاب آپلود شده باشد)
+  # اولویت ۴: کلون ریپو (اگر پوشه patch روی گیت‌هاب آپلود شده باشد)
   if [[ -z "$src_patch" ]]; then
     info "Fetching latest from GitHub git: $GITHUB_REPO (branch $GITHUB_BRANCH)..."
     if safe_git_clone "$GITHUB_REPO" "$tmp/repo" 2>/dev/null; then
