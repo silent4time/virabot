@@ -19,6 +19,8 @@ REPO_NAME="${REPO_NAME:-virabot}"
 ZIP_NAME="virabot-latest.zip"
 REPO_ZIP_RAW="https://raw.githubusercontent.com/${REPO_OWNER}/${REPO_NAME}/main/${ZIP_NAME}"
 REPO_ZIP_GITHUB="https://github.com/${REPO_OWNER}/${REPO_NAME}/raw/main/${ZIP_NAME}"
+REPO_BRANCH="${REPO_BRANCH:-main}"
+REPO_CODELOAD="https://codeload.github.com/${REPO_OWNER}/${REPO_NAME}/zip/refs/heads/${REPO_BRANCH}"
 SRC_DIR="/opt/virabot-src"
 WORK="/tmp/virabot_install_$$"
 
@@ -65,7 +67,7 @@ if [[ "${SKIP_LOCAL:-0}" != "1" ]] && LOCAL_FOUND="$(pick_local_zip)"; then
   echo "[*] Using local package: $LOCAL_FOUND"
   cp -f "$LOCAL_FOUND" "$ZIP_FILE"
 else
-  echo "[*] Downloading ${ZIP_NAME} from GitHub (${REPO_OWNER}/${REPO_NAME})..."
+  echo "[*] Downloading Virabot from GitHub (${REPO_OWNER}/${REPO_NAME})..."
   OK=0
   if [[ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ]]; then
     TOK="${GITHUB_TOKEN:-$GH_TOKEN}"
@@ -73,6 +75,17 @@ else
       -H "Authorization: token ${TOK}" \
       -o "$ZIP_FILE" "$REPO_ZIP_GITHUB"; then
       OK=1
+    fi
+  fi
+  # Preferred: source archive of the branch (always matches the latest commit,
+  # does not depend on the committed virabot-latest.zip being rebuilt).
+  if [[ "$OK" -ne 1 && "${SKIP_CODELOAD:-0}" != "1" ]]; then
+    echo "[*] Trying source archive: ${REPO_CODELOAD}"
+    if curl -fsSL --connect-timeout 15 --max-time 180 --retry 2 -o "$ZIP_FILE" "$REPO_CODELOAD" \
+      && unzip -t "$ZIP_FILE" >/dev/null 2>&1; then
+      OK=1
+    else
+      rm -f "$ZIP_FILE"
     fi
   fi
   if [[ "$OK" -ne 1 ]]; then
