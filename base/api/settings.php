@@ -37,8 +37,13 @@ function validateToken($headers)
     } else {
         return false;
     }
-    $validTokens = [$token, $APIKEY];
-    return in_array($headers['Token'], $validTokens, true);
+    $given = (string) $headers['Token'];
+    foreach ([trim((string) $token), (string) $APIKEY] as $valid) {
+        if ($valid !== '' && hash_equals($valid, $given)) {
+            return true;
+        }
+    }
+    return false;
 }
 
 function sanitizeRecursive($data)
