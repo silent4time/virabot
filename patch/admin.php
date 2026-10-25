@@ -6775,9 +6775,13 @@ if ($datain == "settimecornremove" && $adminrulecheck['rule'] == "administrator"
     outtypepanel($typepanel['type'], $textbotlang['Admin']['algorithmExtend']['saveData']);
     step('home', $from_id);
 } elseif ($text == "/token") {
-    $secret_key = select("admin", "*", "id_admin", $from_id, "select");
-    $secret_key = base64_encode($secret_key['password']);
-    sendmessage($from_id, "<code>$secret_key</code>", null, 'HTML');
+    // Never expose the admin password hash; show (or create) the API token instead.
+    $token = is_file('api/hash.txt') ? trim((string) file_get_contents('api/hash.txt')) : '';
+    if (!preg_match('/^[0-9a-f]{32,}$/', $token)) {
+        $token = bin2hex(random_bytes(16));
+        file_put_contents('api/hash.txt', $token);
+    }
+    sendmessage($from_id, sprintf($textbotlang['Admin']['adminphp']['btn_token_api'], $token), null, 'HTML');
 } elseif ($text == "/token2") {
     $token = bin2hex(random_bytes(16));
     file_put_contents('api/hash.txt', $token);

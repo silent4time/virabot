@@ -1386,6 +1386,10 @@ do_update() {
   if [[ -n "$api_src" && -d "${INSTALL_DIR}/api" ]]; then
     cp -f "$api_src/miniapp.php" "${INSTALL_DIR}/api/miniapp.php"
     [[ -f "$api_src/panels.php" ]] && cp -f "$api_src/panels.php" "${INSTALL_DIR}/api/panels.php"
+    # other API endpoints (token check hardening); hash.txt is never overwritten
+    for apif in category.php discount.php invoice.php log.php payment.php product.php settings.php statbot.php users.php; do
+      [[ -f "$api_src/$apif" ]] && cp -f "$api_src/$apif" "${INSTALL_DIR}/api/$apif"
+    done
     ok "  mini app API"
   fi
   if [[ -f "$pkg/theme/virabot.css" ]]; then
