@@ -2818,7 +2818,7 @@ function virabot_cat_filter_keyboard($catId)
     foreach ($rows as $r) {
         $kb['inline_keyboard'][] = [['text' => '🖥 ' . virabot_cat_short($r['name_panel'], 40), 'callback_data' => "vbc_f_{$catId}_p" . intval($r['id'])]];
     }
-    $kb['inline_keyboard'][] = [['text' => virabot_cat_t('btn_close', '❌ بستن'), 'callback_data' => 'vbc_x']];
+    $kb['inline_keyboard'][] = [['text' => virabot_cat_t('btn_close', '❌ بستن'), 'callback_data' => "vbc_xq_{$catId}"]];
     return json_encode($kb);
 }
 
@@ -2893,7 +2893,7 @@ function virabot_cat_render($state)
     }
     $kb['inline_keyboard'][] = [
         ['text' => virabot_cat_t('btn_filter', '🔙 تغییر فیلتر'), 'callback_data' => 'vbc_b'],
-        ['text' => virabot_cat_t('btn_cancel', '❌ انصراف'), 'callback_data' => 'vbc_x'],
+        ['text' => virabot_cat_t('btn_cancel', '❌ انصراف'), 'callback_data' => 'vbc_xq_s'],
     ];
     return [$text, json_encode($kb)];
 }
@@ -2995,6 +2995,54 @@ function virabot_cat_reply_keyboard($extraFirst = null)
     return json_encode($kb);
 }
 
+/** 5.6.1: find a category from the text of a reply-keyboard button.
+ * Exact match first (raw text, before Persian-digit conversion), then a
+ * whitespace-normalized match, because Telegram trims/collapses spaces in
+ * button texts and $text has its Persian digits converted. */
+function virabot_cat_find_by_text($text)
+{
+    global $pdo, $update;
+    $cands = [];
+    $raw = $update['message']['text'] ?? null;
+    if (is_string($raw) && $raw !== '') {
+        $cands[] = $raw;
+    }
+    $cands[] = (string) $text;
+    $st = $pdo->prepare("SELECT id, remark FROM category WHERE remark = ? LIMIT 1");
+    foreach (array_unique($cands) as $c) {
+        $st->execute([$c]);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        if ($row) {
+            return $row;
+        }
+    }
+    $norm = function ($s) {
+        $s = trim(preg_replace('/\s+/u', ' ', (string) $s));
+        return function_exists('convertPersianNumbersToEnglish') ? convertPersianNumbersToEnglish($s) : $s;
+    };
+    $want = array_map($norm, $cands);
+    foreach ($pdo->query("SELECT id, remark FROM category ORDER BY id ASC")->fetchAll(PDO::FETCH_ASSOC) as $row) {
+        if (in_array($norm($row['remark']), $want, true)) {
+            return $row;
+        }
+    }
+    return null;
+}
+
+/** 5.6.1: keyboard currently shown ('s' = checkbox screen from state, digits = filter screen of that category). */
+function virabot_cat_current_kb($which)
+{
+    if ($which === 's') {
+        $state = virabot_cat_state_get();
+        if (!$state || !isset($state['ids'], $state['sel'], $state['cat'])) {
+            return null;
+        }
+        [, $k] = virabot_cat_render($state);
+        return json_decode($k, true);
+    }
+    return json_decode(virabot_cat_filter_keyboard(intval($which)), true);
+}
+
 /**
  * Admin handler. Called at the top of admin.php; returns true when it handled the update.
  */
@@ -3056,9 +3104,7 @@ function virabot_cat_admin_handle()
 
     // ---- steps ----
     if ($user['step'] === 'vbcat_bulk_pick' && $text !== '' && !$isBack) {
-        $st = $pdo->prepare("SELECT id, remark FROM category WHERE remark = ? LIMIT 1");
-        $st->execute([$text]);
-        $cat = $st->fetch(PDO::FETCH_ASSOC);
+        $cat = virabot_cat_find_by_text($text);
         if (!$cat) {
             sendmessage($from_id, virabot_cat_t('cat_not_found', '❌ این دسته پیدا نشد؛ از دکمه‌ها انتخاب کنید.'), virabot_cat_reply_keyboard(), 'HTML');
             return true;
@@ -3104,6 +3150,30 @@ function virabot_cat_admin_handle()
     // ---- callbacks ----
     if ($datain === '' || strpos($datain, 'vbc_') !== 0) {
         return false;
+    }
+    // 5.6.1: «بستن/انصراف» needs a second tap (an accidental tap used to close the screen at once)
+    if (preg_match('/^vbc_xq_(s|\d+)$/', $datain, $m)) {
+        virabot_cat_answer(virabot_cat_t('close_confirm_hint', 'برای بستن، «✅ بله، ببند» را بزنید.'));
+        $kbArr = virabot_cat_current_kb($m[1]);
+        if ($kbArr === null) {
+            virabot_cat_answer(virabot_cat_t('expired', '⛔️ این صفحه منقضی شده؛ دوباره از «☑️ انتخاب گروهی محصولات» شروع کنید.'), true);
+            return true;
+        }
+        $last = count($kbArr['inline_keyboard']) - 1;
+        $kbArr['inline_keyboard'][$last] = [
+            ['text' => virabot_cat_t('btn_close_yes', '✅ بله، ببند'), 'callback_data' => 'vbc_x'],
+            ['text' => virabot_cat_t('btn_close_no', '↩️ ادامه'), 'callback_data' => 'vbc_xn_' . $m[1]],
+        ];
+        telegram('editMessageReplyMarkup', ['chat_id' => $from_id, 'message_id' => $message_id, 'reply_markup' => json_encode($kbArr)]);
+        return true;
+    }
+    if (preg_match('/^vbc_xn_(s|\d+)$/', $datain, $m)) {
+        virabot_cat_answer();
+        $kbArr = virabot_cat_current_kb($m[1]);
+        if ($kbArr !== null) {
+            telegram('editMessageReplyMarkup', ['chat_id' => $from_id, 'message_id' => $message_id, 'reply_markup' => json_encode($kbArr)]);
+        }
+        return true;
     }
     if ($datain === 'vbc_x') {
         virabot_cat_answer();
