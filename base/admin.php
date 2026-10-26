@@ -5,6 +5,9 @@ $text_panel_admin_login_template = sprintf($textbotlang['Admin']['adminphp']['ms
 
 if (!in_array($from_id, $admin_ids))
     return;
+// Virabot 5.6.0: category tools (bulk checkbox screen, «سایر» toggle, panel default category)
+if (function_exists('virabot_cat_admin_handle') && virabot_cat_admin_handle())
+    return;
 $domainhostsEscaped = htmlspecialchars($domainhosts, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
 $miniAppInstructionText = sprintf($textbotlang['Admin']['adminphp']['msg_mini_app_instruction'], $domainhostsEscaped);
@@ -2625,6 +2628,13 @@ elseif ($datain == "systemsms") {
     $varhide_panel = "{}";
     if (!isset($userdata['category']))
         $userdata['category'] = null;
+    // Virabot 5.6.0: product without category gets the panel's default category
+    if (($userdata['category'] === null || $userdata['category'] === '') && function_exists('virabot_panel_default_category')) {
+        $vbDef = virabot_panel_default_category($userdata['Location'] ?? '');
+        if ($vbDef !== '' && virabot_ensure_category($vbDef) !== '') {
+            $userdata['category'] = $vbDef;
+        }
+    }
     $stmt = $pdo->prepare("INSERT IGNORE INTO product (name_product,code_product,price_product,Volume_constraint,Service_time,Location,agent,data_limit_reset,note,category,hide_panel,one_buy_status) VALUES (:name_product,:code_product,:price_product,:Volume_constraint,:Service_time,:Location,:agent,:data_limit_reset,:note,:category,:hide_panel,'0')");
     $stmt->bindParam(':name_product', $userdata['name_product']);
     $stmt->bindParam(':code_product', $randomString);

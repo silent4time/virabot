@@ -1971,3 +1971,631 @@ function virabot_payment_lock($order_id, $timeout = 10)
     });
     return true;
 }
+
+/* =====================================================================
+ * Virabot 5.6.0 — category tools
+ *  - virabot_ensure_category(): INSERT ... WHERE NOT EXISTS
+ *  - default category per panel (marzban_panel.default_category)
+ *  - «📦 سایر» for products whose category is NULL / '' / has no row
+ *  - admin bulk checkbox screen (callback prefix vbc_)
+ * Same block lives in patch/function.php and base/function.php.
+ * ===================================================================== */
+if (!function_exists('virabot_cat_t')) {
+
+function virabot_cat_t($key, $default)
+{
+    global $textbotlang;
+    $v = $textbotlang['vbcat'][$key] ?? null;
+    return (is_string($v) && $v !== '') ? $v : $default;
+}
+
+/** Category values that were written automatically (not by an admin). */
+function virabot_cat_legacy_defaults()
+{
+    return ['کانکتیکس'];
+}
+
+/** Create the category row if it does not exist yet. Returns the trimmed name or ''. */
+function virabot_ensure_category($remark)
+{
+    global $pdo;
+    $remark = trim((string) $remark);
+    if ($remark === '' || mb_strlen($remark) > 400) {
+        return '';
+    }
+    try {
+        $st = $pdo->prepare("INSERT INTO category (remark) SELECT ? FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM category WHERE remark = ?)");
+        $st->execute([$remark, $remark]);
+    } catch (Throwable $e) {
+        error_log('virabot_ensure_category: ' . $e->getMessage());
+        return '';
+    }
+    return $remark;
+}
+
+/** Default category of a panel ('' when unset, '/all', or before migration). */
+function virabot_panel_default_category($panelName)
+{
+    global $pdo;
+    if ($panelName === null || $panelName === '' || $panelName === '/all') {
+        return '';
+    }
+    try {
+        $st = $pdo->prepare("SELECT default_category FROM marzban_panel WHERE name_panel = ? LIMIT 1");
+        $st->execute([$panelName]);
+        $v = $st->fetchColumn();
+    } catch (Throwable $e) {
+        return '';
+    }
+    return ($v === false || $v === null) ? '' : trim((string) $v);
+}
+
+/** Is the «سایر» button enabled? (on by default, also before migration) */
+function virabot_other_enabled()
+{
+    global $setting, $pdo;
+    if (is_array($setting) && array_key_exists('statusothercategory', $setting)) {
+        return ($setting['statusothercategory'] ?? 'on') !== 'off';
+    }
+    try {
+        $v = $pdo->query("SELECT statusothercategory FROM setting LIMIT 1")->fetchColumn();
+        return $v !== 'off';
+    } catch (Throwable $e) {
+        return true;
+    }
+}
+
+/** SQL condition: product (alias $a) has no usable category. */
+function virabot_other_cond($a = 'p')
+{
+    return "($a.category IS NULL OR $a.category = '' OR NOT EXISTS (SELECT 1 FROM category vc WHERE vc.remark = $a.category))";
+}
+
+/** Panels (active, visible to agent) that have «سایر» products for that agent. */
+function virabot_other_panels($agent)
+{
+    global $pdo;
+    try {
+        $st = $pdo->prepare("SELECT DISTINCT m.name_panel, m.code_panel FROM marzban_panel m
+            INNER JOIN product p ON (p.Location = m.name_panel OR p.Location = '/all')
+            WHERE m.status = 'active' AND (m.agent = ? OR m.agent = 'all')
+              AND p.agent = ?
+              AND (p.one_buy_status IS NULL OR p.one_buy_status <> 'test')
+              AND " . virabot_other_cond('p') . "
+            ORDER BY m.name_panel ASC");
+        $st->execute([$agent, $agent]);
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        error_log('virabot_other_panels: ' . $e->getMessage());
+        return [];
+    }
+}
+
+/** Does this panel have «سایر» products for the agent? */
+function virabot_other_has_location($location, $agent)
+{
+    global $pdo;
+    try {
+        $st = $pdo->prepare("SELECT 1 FROM product p WHERE (p.Location = ? OR p.Location = '/all') AND p.agent = ?
+            AND (p.one_buy_status IS NULL OR p.one_buy_status <> 'test') AND " . virabot_other_cond('p') . " LIMIT 1");
+        $st->execute([$location, $agent]);
+        return (bool) $st->fetchColumn();
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
+/** [sql, params] for the «سایر» products of one panel (optionally one month). */
+function virabot_other_product_query($location, $agent, $month = null)
+{
+    $sql = "SELECT p.* FROM product p WHERE (p.Location = ? OR p.Location = '/all') AND p.agent = ? AND " . virabot_other_cond('p');
+    $params = [$location, $agent];
+    if ($month !== null && $month !== '') {
+        $sql .= " AND p.Service_time = ?";
+        $params[] = (string) $month;
+    }
+    return [$sql, $params];
+}
+
+function virabot_other_button_text()
+{
+    return virabot_cat_t('btn_other', '📦 سایر');
+}
+
+/** Inline keyboard: panels that have «سایر» products (global category-first flow). */
+function KeyboardPanelsForOther($agent)
+{
+    global $textbotlang;
+    $list = ['inline_keyboard' => []];
+    foreach (virabot_other_panels($agent) as $row) {
+        $list['inline_keyboard'][] = [
+            ['text' => $row['name_panel'], 'callback_data' => 'location_' . $row['code_panel']],
+        ];
+    }
+    $list['inline_keyboard'][] = [
+        ['text' => $textbotlang['keyboard']['backToPreviousMenu'] ?? '🔙 بازگشت', 'callback_data' => 'backtocategories'],
+    ];
+    return json_encode($list);
+}
+
+/* ---------------- admin: bulk checkbox screen ---------------- */
+
+function virabot_cat_answer($text = '', $alert = false)
+{
+    global $callback_query_id;
+    if (empty($callback_query_id)) {
+        return;
+    }
+    $d = ['callback_query_id' => $callback_query_id];
+    if ($text !== '') {
+        $d['text'] = $text;
+        $d['show_alert'] = $alert;
+    }
+    telegram('answerCallbackQuery', $d);
+}
+
+function virabot_cat_state_get()
+{
+    global $pdo, $from_id;
+    try {
+        $st = $pdo->prepare("SELECT Processing_value FROM user WHERE id = ? LIMIT 1");
+        $st->execute([$from_id]);
+        $raw = $st->fetchColumn();
+    } catch (Throwable $e) {
+        return null;
+    }
+    $d = json_decode((string) $raw, true);
+    if (!is_array($d) || !isset($d['vbcat']) || !is_array($d['vbcat'])) {
+        return null;
+    }
+    return $d['vbcat'];
+}
+
+function virabot_cat_state_put($state)
+{
+    global $pdo, $from_id;
+    $st = $pdo->prepare("UPDATE user SET Processing_value = ? WHERE id = ?");
+    $st->execute([json_encode(['vbcat' => $state], JSON_UNESCAPED_UNICODE), $from_id]);
+}
+
+function virabot_cat_short($s, $n)
+{
+    $s = trim(preg_replace('/\s+/u', ' ', (string) $s));
+    return mb_strlen($s) > $n ? (mb_substr($s, 0, $n - 1) . '…') : $s;
+}
+
+/** Product ids of a filter ('a' all, 'u' uncategorized, 'p<id>' one panel). Test products are excluded. */
+function virabot_cat_filter_ids($filter)
+{
+    global $pdo;
+    $where = "(p.one_buy_status IS NULL OR p.one_buy_status <> 'test')";
+    $params = [];
+    if ($filter === 'u') {
+        $where .= " AND " . virabot_other_cond('p');
+    } elseif (preg_match('/^p(\d+)$/', $filter, $m)) {
+        $st = $pdo->prepare("SELECT name_panel FROM marzban_panel WHERE id = ? LIMIT 1");
+        $st->execute([intval($m[1])]);
+        $pn = $st->fetchColumn();
+        if ($pn === false) {
+            return null;
+        }
+        $where .= " AND p.Location = ?";
+        $params[] = $pn;
+    } elseif ($filter !== 'a') {
+        return null;
+    }
+    $st = $pdo->prepare("SELECT p.id FROM product p WHERE $where ORDER BY p.Location ASC, p.name_product ASC, p.id ASC");
+    $st->execute($params);
+    return array_map('intval', $st->fetchAll(PDO::FETCH_COLUMN));
+}
+
+function virabot_cat_filter_label($filter)
+{
+    global $pdo;
+    if ($filter === 'a') {
+        return virabot_cat_t('f_all', 'همه پنل‌ها');
+    }
+    if ($filter === 'u') {
+        return virabot_cat_t('f_uncat', 'فقط محصولات بدون دسته («سایر»)');
+    }
+    if (preg_match('/^p(\d+)$/', $filter, $m)) {
+        $st = $pdo->prepare("SELECT name_panel FROM marzban_panel WHERE id = ? LIMIT 1");
+        $st->execute([intval($m[1])]);
+        $pn = $st->fetchColumn();
+        return virabot_cat_t('f_panel', 'پنل') . ': ' . ($pn === false ? '?' : $pn);
+    }
+    return $filter;
+}
+
+function virabot_cat_filter_keyboard($catId)
+{
+    global $pdo;
+    $catId = intval($catId);
+    $kb = ['inline_keyboard' => []];
+    $kb['inline_keyboard'][] = [['text' => '🌐 ' . virabot_cat_t('f_all', 'همه پنل‌ها'), 'callback_data' => "vbc_f_{$catId}_a"]];
+    $kb['inline_keyboard'][] = [['text' => '📦 ' . virabot_cat_t('f_uncat', 'فقط محصولات بدون دسته («سایر»)'), 'callback_data' => "vbc_f_{$catId}_u"]];
+    $rows = $pdo->query("SELECT id, name_panel FROM marzban_panel ORDER BY name_panel ASC")->fetchAll(PDO::FETCH_ASSOC);
+    foreach ($rows as $r) {
+        $kb['inline_keyboard'][] = [['text' => '🖥 ' . virabot_cat_short($r['name_panel'], 40), 'callback_data' => "vbc_f_{$catId}_p" . intval($r['id'])]];
+    }
+    $kb['inline_keyboard'][] = [['text' => virabot_cat_t('btn_close', '❌ بستن'), 'callback_data' => 'vbc_x']];
+    return json_encode($kb);
+}
+
+function virabot_cat_page_size()
+{
+    return 8;
+}
+
+/** Text + keyboard of the checkbox page. */
+function virabot_cat_render($state)
+{
+    global $pdo;
+    $ids = $state['ids'];
+    $sel = array_flip($state['sel']);
+    $total = count($ids);
+    $ps = virabot_cat_page_size();
+    $pages = max(1, (int) ceil($total / $ps));
+    $page = min(max(1, intval($state['page'])), $pages);
+    $slice = array_slice($ids, ($page - 1) * $ps, $ps);
+    $selInSet = 0;
+    foreach ($ids as $i) {
+        if (isset($sel[$i])) {
+            $selInSet++;
+        }
+    }
+    $text = sprintf(
+        virabot_cat_t('screen', "☑️ <b>انتخاب گروهی برای دسته «%s»</b>\nفیلتر: %s\nانتخاب‌شده: %d از %d — صفحه %d از %d\n\nروی هر محصول بزنید تا تیک بخورد یا برداشته شود، بعد «💾 ذخیره» را بزنید.\nبرداشتن تیک یعنی محصول بدون دسته می‌شود و زیر «📦 سایر» نمایش داده می‌شود."),
+        htmlspecialchars($state['remark'], ENT_QUOTES, 'UTF-8'),
+        htmlspecialchars(virabot_cat_filter_label($state['f']), ENT_QUOTES, 'UTF-8'),
+        $selInSet, $total, $page, $pages
+    );
+    $kb = ['inline_keyboard' => []];
+    if ($total === 0) {
+        $text .= "\n\n" . virabot_cat_t('empty', '⚠️ در این فیلتر محصولی نیست.');
+    }
+    $info = [];
+    if ($slice) {
+        $in = implode(',', array_fill(0, count($slice), '?'));
+        $st = $pdo->prepare("SELECT id, name_product, Location, agent, category FROM product WHERE id IN ($in)");
+        $st->execute($slice);
+        foreach ($st->fetchAll(PDO::FETCH_ASSOC) as $r) {
+            $info[intval($r['id'])] = $r;
+        }
+    }
+    foreach ($slice as $pid) {
+        if (!isset($info[$pid])) {
+            continue; // deleted meanwhile
+        }
+        $r = $info[$pid];
+        $mark = isset($sel[$pid]) ? '☑️' : '⬜';
+        $agentTag = ($r['agent'] !== 'f' && $r['agent'] !== null && $r['agent'] !== '') ? (' [' . $r['agent'] . ']') : '';
+        $label = $mark . ' ' . virabot_cat_short($r['name_product'], 28) . $agentTag . ' | ' . virabot_cat_short($r['Location'], 14);
+        $kb['inline_keyboard'][] = [['text' => $label, 'callback_data' => 'vbc_t_' . $pid]];
+    }
+    if ($pages > 1) {
+        $nav = [];
+        if ($page > 1) {
+            $nav[] = ['text' => '◀️', 'callback_data' => 'vbc_p_' . ($page - 1)];
+        }
+        $nav[] = ['text' => "$page / $pages", 'callback_data' => 'vbc_p_' . $page];
+        if ($page < $pages) {
+            $nav[] = ['text' => '▶️', 'callback_data' => 'vbc_p_' . ($page + 1)];
+        }
+        $kb['inline_keyboard'][] = $nav;
+    }
+    if ($total > 0) {
+        $kb['inline_keyboard'][] = [
+            ['text' => virabot_cat_t('btn_all', '✅ انتخاب همه'), 'callback_data' => 'vbc_all'],
+            ['text' => virabot_cat_t('btn_none', '⬜ هیچ‌کدام'), 'callback_data' => 'vbc_none'],
+        ];
+        $kb['inline_keyboard'][] = [['text' => virabot_cat_t('btn_save', '💾 ذخیره'), 'callback_data' => 'vbc_save']];
+    }
+    $kb['inline_keyboard'][] = [
+        ['text' => virabot_cat_t('btn_filter', '🔙 تغییر فیلتر'), 'callback_data' => 'vbc_b'],
+        ['text' => virabot_cat_t('btn_cancel', '❌ انصراف'), 'callback_data' => 'vbc_x'],
+    ];
+    return [$text, json_encode($kb)];
+}
+
+/**
+ * Apply the selection in one transaction.
+ * Returns ['ok'=>bool,'added'=>n,'removed'=>n,'unchanged'=>n,'error'=>?]
+ */
+function virabot_cat_save($state)
+{
+    global $pdo;
+    $remark = (string) $state['remark'];
+    $st = $pdo->prepare("SELECT COUNT(*) FROM category WHERE id = ? AND remark = ?");
+    $st->execute([intval($state['cat']), $remark]);
+    if (intval($st->fetchColumn()) === 0) {
+        return ['ok' => false, 'error' => 'category_missing'];
+    }
+    $ids = array_values(array_unique(array_map('intval', $state['ids'])));
+    $sel = array_flip(array_map('intval', $state['sel']));
+    $added = 0;
+    $removed = 0;
+    $unchanged = 0;
+    try {
+        $pdo->beginTransaction();
+        $current = [];
+        foreach (array_chunk($ids, 500) as $chunk) {
+            $in = implode(',', array_fill(0, count($chunk), '?'));
+            $q = $pdo->prepare("SELECT id, category FROM product WHERE id IN ($in) FOR UPDATE");
+            $q->execute($chunk);
+            foreach ($q->fetchAll(PDO::FETCH_ASSOC) as $r) {
+                $current[intval($r['id'])] = $r['category'];
+            }
+        }
+        $toAdd = [];
+        $toRemove = [];
+        foreach ($current as $pid => $cat) {
+            $inCat = ($cat !== null && (string) $cat === $remark);
+            if (isset($sel[$pid]) && !$inCat) {
+                $toAdd[] = $pid;
+            } elseif (!isset($sel[$pid]) && $inCat) {
+                $toRemove[] = $pid;
+            } else {
+                $unchanged++;
+            }
+        }
+        foreach (array_chunk($toAdd, 500) as $chunk) {
+            $in = implode(',', array_fill(0, count($chunk), '?'));
+            $u = $pdo->prepare("UPDATE product SET category = ? WHERE id IN ($in)");
+            $u->execute(array_merge([$remark], $chunk));
+            $added += count($chunk);
+        }
+        foreach (array_chunk($toRemove, 500) as $chunk) {
+            $in = implode(',', array_fill(0, count($chunk), '?'));
+            $u = $pdo->prepare("UPDATE product SET category = NULL WHERE id IN ($in) AND category = ?");
+            $u->execute(array_merge($chunk, [$remark]));
+            $removed += count($chunk);
+        }
+        $pdo->commit();
+    } catch (Throwable $e) {
+        if ($pdo->inTransaction()) {
+            $pdo->rollBack();
+        }
+        error_log('virabot_cat_save: ' . $e->getMessage());
+        return ['ok' => false, 'error' => 'db'];
+    }
+    return ['ok' => true, 'added' => $added, 'removed' => $removed, 'unchanged' => $unchanged];
+}
+
+/** Reply-keyboard texts of the new admin buttons. */
+function virabot_cat_btn_bulk()
+{
+    return virabot_cat_t('btn_bulk', '☑️ انتخاب گروهی محصولات');
+}
+function virabot_cat_btn_other_toggle()
+{
+    return virabot_cat_t('btn_other_toggle', '📦 روشن/خاموش دکمه «سایر»');
+}
+function virabot_cat_btn_defcat()
+{
+    return virabot_cat_t('btn_defcat', '🗂 دسته پیش‌فرض پنل');
+}
+function virabot_cat_btn_defcat_clear()
+{
+    return virabot_cat_t('btn_defcat_clear', '🚫 بدون دسته پیش‌فرض');
+}
+
+/** Category reply keyboard with an extra first row. */
+function virabot_cat_reply_keyboard($extraFirst = null)
+{
+    global $pdo, $textbotlang;
+    $kb = ['keyboard' => [], 'resize_keyboard' => true];
+    if ($extraFirst !== null) {
+        $kb['keyboard'][] = [['text' => $extraFirst]];
+    }
+    foreach ($pdo->query("SELECT remark FROM category ORDER BY remark ASC")->fetchAll(PDO::FETCH_COLUMN) as $r) {
+        $kb['keyboard'][] = [['text' => $r]];
+    }
+    $kb['keyboard'][] = [['text' => $textbotlang['Admin']['backAdminBtn']]];
+    return json_encode($kb);
+}
+
+/**
+ * Admin handler. Called at the top of admin.php; returns true when it handled the update.
+ */
+function virabot_cat_admin_handle()
+{
+    global $text, $datain, $user, $from_id, $message_id, $adminrulecheck, $textbotlang, $pdo, $setting, $keyboard_Category_manage;
+    $vbRule = select("admin", "*", "id_admin", $from_id, "select");
+    $isAdmin = is_array($vbRule) && ($vbRule['rule'] ?? '') == "administrator";
+    if (!$isAdmin) {
+        return false;
+    }
+    $text = isset($text) ? $text : '';
+    $datain = isset($datain) ? $datain : '';
+    $backTexts = [$textbotlang['Admin']['backAdminBtn'] ?? '', $textbotlang['Admin']['backMenuBtn'] ?? '', 'panel', '/panel', $textbotlang['Admin']['panelAdmin'] ?? ''];
+    $isBack = ($text !== '' && in_array($text, $backTexts, true));
+
+    // ---- reply buttons ----
+    if ($text !== '' && $text === virabot_cat_btn_bulk()) {
+        $n = intval($pdo->query("SELECT COUNT(*) FROM category")->fetchColumn());
+        if ($n === 0) {
+            sendmessage($from_id, virabot_cat_t('no_category', '⚠️ هنوز دسته‌ای تعریف نشده. اول از «افزودن دسته» یک دسته بسازید.'), $keyboard_Category_manage, 'HTML');
+            return true;
+        }
+        sendmessage($from_id, virabot_cat_t('ask_bulk_cat', 'دسته‌ای را که می‌خواهید محصولاتش را انتخاب کنید، بفرستید:'), virabot_cat_reply_keyboard(), 'HTML');
+        step('vbcat_bulk_pick', $from_id);
+        return true;
+    }
+    if ($text !== '' && $text === virabot_cat_btn_other_toggle()) {
+        $new = virabot_other_enabled() ? 'off' : 'on';
+        try {
+            $pdo->prepare("UPDATE setting SET statusothercategory = ?")->execute([$new]);
+            $setting['statusothercategory'] = $new;
+        } catch (Throwable $e) {
+            sendmessage($from_id, virabot_cat_t('need_migration', '⚠️ ستون جدید هنوز ساخته نشده؛ یک بار به‌روزرسانی (table.php) را اجرا کنید.'), $keyboard_Category_manage, 'HTML');
+            return true;
+        }
+        $msg = $new === 'on'
+            ? virabot_cat_t('other_on', '✅ دکمه «📦 سایر» در خرید روشن شد. محصولات بدون دسته زیر آن نمایش داده می‌شوند.')
+            : virabot_cat_t('other_off', '⛔️ دکمه «📦 سایر» خاموش شد. محصولات بدون دسته در مسیر خرید دسته‌ای نمایش داده نمی‌شوند.');
+        sendmessage($from_id, $msg, $keyboard_Category_manage, 'HTML');
+        return true;
+    }
+    if ($text !== '' && $text === virabot_cat_btn_defcat()) {
+        $panel = select("marzban_panel", "*", "name_panel", $user['Processing_value'], "select");
+        if (!$panel) {
+            sendmessage($from_id, virabot_cat_t('defcat_no_panel', '⚠️ اول از «مدیریت پنل» پنل را انتخاب کنید.'), null, 'HTML');
+            return true;
+        }
+        $cur = trim((string) ($panel['default_category'] ?? ''));
+        $msg = sprintf(
+            virabot_cat_t('defcat_ask', "🗂 دسته پیش‌فرض پنل «%s»\nمقدار فعلی: %s\n\nمحصول جدیدِ این پنل (ساخت دستی یا همگام‌سازی) که دسته ندارد، این دسته را می‌گیرد.\nیک دسته از لیست انتخاب کنید یا نام دسته جدید را بفرستید (اگر نباشد ساخته می‌شود)."),
+            htmlspecialchars($panel['name_panel'], ENT_QUOTES, 'UTF-8'),
+            $cur === '' ? virabot_cat_t('none', '— ندارد —') : htmlspecialchars($cur, ENT_QUOTES, 'UTF-8')
+        );
+        sendmessage($from_id, $msg, virabot_cat_reply_keyboard(virabot_cat_btn_defcat_clear()), 'HTML');
+        step('vbcat_defcat', $from_id);
+        return true;
+    }
+
+    // ---- steps ----
+    if ($user['step'] === 'vbcat_bulk_pick' && $text !== '' && !$isBack) {
+        $st = $pdo->prepare("SELECT id, remark FROM category WHERE remark = ? LIMIT 1");
+        $st->execute([$text]);
+        $cat = $st->fetch(PDO::FETCH_ASSOC);
+        if (!$cat) {
+            sendmessage($from_id, virabot_cat_t('cat_not_found', '❌ این دسته پیدا نشد؛ از دکمه‌ها انتخاب کنید.'), virabot_cat_reply_keyboard(), 'HTML');
+            return true;
+        }
+        step('home', $from_id);
+        sendmessage($from_id, virabot_cat_t('bulk_started', '✅ دسته انتخاب شد.'), $keyboard_Category_manage, 'HTML');
+        sendmessage($from_id, sprintf(virabot_cat_t('ask_filter', "☑️ دسته «%s»\nکدام محصولات نمایش داده شوند؟"), htmlspecialchars($cat['remark'], ENT_QUOTES, 'UTF-8')), virabot_cat_filter_keyboard($cat['id']), 'HTML');
+        return true;
+    }
+    if ($user['step'] === 'vbcat_defcat' && $text !== '' && !$isBack) {
+        $panel = select("marzban_panel", "*", "name_panel", $user['Processing_value'], "select");
+        if (!$panel) {
+            step('home', $from_id);
+            sendmessage($from_id, virabot_cat_t('defcat_no_panel', '⚠️ اول از «مدیریت پنل» پنل را انتخاب کنید.'), null, 'HTML');
+            return true;
+        }
+        try {
+            if ($text === virabot_cat_btn_defcat_clear()) {
+                $pdo->prepare("UPDATE marzban_panel SET default_category = NULL WHERE id = ?")->execute([$panel['id']]);
+                $msg = virabot_cat_t('defcat_cleared', '✅ دسته پیش‌فرض این پنل برداشته شد.');
+            } else {
+                $name = virabot_ensure_category($text);
+                if ($name === '') {
+                    sendmessage($from_id, virabot_cat_t('defcat_invalid', '❌ نام دسته معتبر نیست (حداکثر ۴۰۰ کاراکتر).'), null, 'HTML');
+                    return true;
+                }
+                $pdo->prepare("UPDATE marzban_panel SET default_category = ? WHERE id = ?")->execute([$name, $panel['id']]);
+                $msg = sprintf(virabot_cat_t('defcat_saved', "✅ دسته پیش‌فرض پنل روی «%s» تنظیم شد.\nمحصولات فعلی تغییر نمی‌کنند؛ برای آن‌ها از «☑️ انتخاب گروهی محصولات» استفاده کنید."), htmlspecialchars($name, ENT_QUOTES, 'UTF-8'));
+            }
+        } catch (Throwable $e) {
+            error_log('vbcat_defcat: ' . $e->getMessage());
+            $msg = virabot_cat_t('need_migration', '⚠️ ستون جدید هنوز ساخته نشده؛ یک بار به‌روزرسانی (table.php) را اجرا کنید.');
+        }
+        step('home', $from_id);
+        if (function_exists('outtypepanel')) {
+            outtypepanel($panel['type'], $msg);
+        } else {
+            sendmessage($from_id, $msg, null, 'HTML');
+        }
+        return true;
+    }
+
+    // ---- callbacks ----
+    if ($datain === '' || strpos($datain, 'vbc_') !== 0) {
+        return false;
+    }
+    if ($datain === 'vbc_x') {
+        virabot_cat_answer();
+        Editmessagetext($from_id, $message_id, virabot_cat_t('closed', 'بسته شد؛ تغییری ذخیره نشد.'), json_encode(['inline_keyboard' => []]));
+        update("user", "Processing_value", "{}", "id", $from_id);
+        return true;
+    }
+    if (preg_match('/^vbc_f_(\d+)_(a|u|p\d+)$/', $datain, $m)) {
+        $st = $pdo->prepare("SELECT id, remark FROM category WHERE id = ? LIMIT 1");
+        $st->execute([intval($m[1])]);
+        $cat = $st->fetch(PDO::FETCH_ASSOC);
+        $ids = $cat ? virabot_cat_filter_ids($m[2]) : null;
+        if (!$cat || $ids === null) {
+            virabot_cat_answer(virabot_cat_t('cat_not_found', '❌ این دسته پیدا نشد؛ از دکمه‌ها انتخاب کنید.'), true);
+            return true;
+        }
+        $sel = [];
+        if ($ids) {
+            foreach (array_chunk($ids, 500) as $chunk) {
+                $in = implode(',', array_fill(0, count($chunk), '?'));
+                $q = $pdo->prepare("SELECT id FROM product WHERE id IN ($in) AND category = ?");
+                $q->execute(array_merge($chunk, [$cat['remark']]));
+                $sel = array_merge($sel, array_map('intval', $q->fetchAll(PDO::FETCH_COLUMN)));
+            }
+        }
+        $state = ['cat' => intval($cat['id']), 'remark' => $cat['remark'], 'f' => $m[2], 'page' => 1, 'ids' => $ids, 'sel' => $sel, 'mid' => intval($message_id)];
+        virabot_cat_state_put($state);
+        virabot_cat_answer();
+        [$t, $k] = virabot_cat_render($state);
+        Editmessagetext($from_id, $message_id, $t, $k);
+        return true;
+    }
+    $state = virabot_cat_state_get();
+    if (!$state || !isset($state['ids'], $state['sel'], $state['cat'])) {
+        virabot_cat_answer(virabot_cat_t('expired', '⛔️ این صفحه منقضی شده؛ دوباره از «☑️ انتخاب گروهی محصولات» شروع کنید.'), true);
+        return true;
+    }
+    if ($datain === 'vbc_b') {
+        virabot_cat_answer();
+        Editmessagetext($from_id, $message_id, sprintf(virabot_cat_t('ask_filter', "☑️ دسته «%s»\nکدام محصولات نمایش داده شوند؟"), htmlspecialchars($state['remark'], ENT_QUOTES, 'UTF-8')), virabot_cat_filter_keyboard($state['cat']));
+        return true;
+    }
+    if (preg_match('/^vbc_t_(\d+)$/', $datain, $m)) {
+        $pid = intval($m[1]);
+        if (!in_array($pid, $state['ids'], true)) {
+            virabot_cat_answer(virabot_cat_t('not_in_filter', 'این محصول در فیلتر فعلی نیست.'));
+            return true;
+        }
+        $k = array_search($pid, $state['sel'], true);
+        if ($k === false) {
+            $state['sel'][] = $pid;
+            virabot_cat_answer(virabot_cat_t('checked', '☑️ انتخاب شد'));
+        } else {
+            unset($state['sel'][$k]);
+            $state['sel'] = array_values($state['sel']);
+            virabot_cat_answer(virabot_cat_t('unchecked', '⬜ برداشته شد'));
+        }
+    } elseif (preg_match('/^vbc_p_(\d+)$/', $datain, $m)) {
+        $state['page'] = max(1, intval($m[1]));
+        virabot_cat_answer();
+    } elseif ($datain === 'vbc_all') {
+        $state['sel'] = $state['ids'];
+        virabot_cat_answer(virabot_cat_t('all_checked', '✅ همه محصولات این فیلتر انتخاب شدند'));
+    } elseif ($datain === 'vbc_none') {
+        $state['sel'] = [];
+        virabot_cat_answer(virabot_cat_t('none_checked', '⬜ همه تیک‌ها برداشته شد'));
+    } elseif ($datain === 'vbc_save') {
+        $r = virabot_cat_save($state);
+        if (!$r['ok']) {
+            virabot_cat_answer($r['error'] === 'category_missing'
+                ? virabot_cat_t('save_cat_missing', '❌ این دسته در این فاصله حذف یا تغییرنام داده شده؛ چیزی ذخیره نشد.')
+                : virabot_cat_t('save_failed', '❌ ذخیره ناموفق بود؛ هیچ تغییری اعمال نشد.'), true);
+            return true;
+        }
+        virabot_cat_answer(virabot_cat_t('saved_short', '💾 ذخیره شد'));
+        update("user", "Processing_value", "{}", "id", $from_id);
+        $sum = sprintf(
+            virabot_cat_t('saved', "💾 <b>ذخیره شد</b> — دسته «%s» (%s)\n➕ اضافه‌شده به دسته: %d\n➖ برداشته‌شده (به «سایر» رفت): %d\n▫️ بدون تغییر: %d"),
+            htmlspecialchars($state['remark'], ENT_QUOTES, 'UTF-8'),
+            htmlspecialchars(virabot_cat_filter_label($state['f']), ENT_QUOTES, 'UTF-8'),
+            $r['added'], $r['removed'], $r['unchanged']
+        );
+        Editmessagetext($from_id, $message_id, $sum, json_encode(['inline_keyboard' => []]));
+        return true;
+    } else {
+        virabot_cat_answer();
+        return true;
+    }
+    virabot_cat_state_put($state);
+    [$t, $k] = virabot_cat_render($state);
+    Editmessagetext($from_id, $message_id, $t, $k);
+    return true;
+}
+
+}
