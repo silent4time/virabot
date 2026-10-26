@@ -3679,6 +3679,15 @@ if ($user['step'] == "createusertest" || $user['step'] == "createusertest_cx" ||
     } else {
         sendmessage($from_id, $textbotlang['textbot']['selectLocation'], $list_marzban_panel_user, 'HTML');
     }
+} elseif ($datain === 'catbuy_o') {
+    // Virabot 5.6.0: «📦 سایر» → panel → product
+    if (!function_exists('virabot_other_enabled') || !virabot_other_enabled()) {
+        telegram('answerCallbackQuery', ['callback_query_id' => $callback_query_id, 'text' => virabot_cat_t('other_disabled', 'این بخش غیرفعال است.'), 'show_alert' => true]);
+        return;
+    }
+    savedata('clear', 'buy_category', '__other__');
+    Editmessagetext($from_id, $message_id, $textbotlang['vbcat']['pick_panel'] ?? 'سرویس مورد نظر را انتخاب کنید', KeyboardPanelsForOther($user['agent']));
+    return;
 } elseif (preg_match('/^catbuy_(\d+)/', $datain, $dataget)) {
     $catId = $dataget[1];
     $catRow = select("category", "*", "id", $catId, "select");
@@ -3730,11 +3739,17 @@ if ($user['step'] == "createusertest" || $user['step'] == "createusertest_cx" ||
     }
     $pickedCategory = $userdate['buy_category'] ?? '';
     if ($pickedCategory !== '') {
-        $query = "SELECT * FROM product WHERE (Location = '$location' OR Location = '/all') AND agent= '{$user['agent']}' AND category = " . $pdo->quote($pickedCategory);
+        // Virabot 5.6.0: prepared query; '__other__' = products without a usable category
+        if ($pickedCategory === '__other__' && function_exists('virabot_other_product_query')) {
+            [$query, $vbParams] = virabot_other_product_query($location, $user['agent']);
+        } else {
+            $query = "SELECT * FROM product WHERE (Location = ? OR Location = '/all') AND agent = ? AND category = ?";
+            $vbParams = [$location, $user['agent'], $pickedCategory];
+        }
         $statuscustomvolume = json_decode($marzban_list_get['customvolume'], true)[$user['agent']];
         $datakeyboard = ($marzban_list_get['MethodUsername'] == $textbotlang['users']['customusername'] || $marzban_list_get['MethodUsername'] == $textbotlang['keyboard']['customUsernameRandom']) ? "prodcutservices_" : "prodcutservice_";
         $statuscustom = ($statuscustomvolume == "1" && $marzban_list_get['type'] != "Manualsale");
-        Editmessagetext($from_id, $message_id, 'محصول نهایی را انتخاب کنید', KeyboardProduct($marzban_list_get['name_panel'], $query, $user['pricediscount'], $datakeyboard, $statuscustom, 'backtocategories'));
+        Editmessagetext($from_id, $message_id, 'محصول نهایی را انتخاب کنید', KeyboardProduct($marzban_list_get['name_panel'], $query, $user['pricediscount'], $datakeyboard, $statuscustom, 'backtocategories', null, 'customsellvolume', $vbParams));
         return;
     }
     if ($setting['statuscategory'] == "offcategory") {
@@ -3776,12 +3791,28 @@ if ($user['step'] == "createusertest" || $user['step'] == "createusertest_cx" ||
     }
 } elseif (preg_match('/^categorynames_(.*)/', $datain, $dataget)) {
     $categorynames = $dataget[1];
-    $categorynames = select("category", "remark", "id", $categorynames, "select")['remark'];
     $userdate = json_decode($user['Processing_value'], true);
-    if (isset($userdate['monthproduct'])) {
-        $query = "SELECT * FROM product WHERE (Location = '{$userdate['name_panel']}' OR Location = '/all') AND agent= '{$user['agent']}' AND category = '$categorynames' AND Service_time = '{$userdate['monthproduct']}'";
+    // Virabot 5.6.0: prepared queries; "o" = «📦 سایر» (no usable category)
+    $vbMonth = isset($userdate['monthproduct']) ? $userdate['monthproduct'] : null;
+    if ($categorynames === 'o' && function_exists('virabot_other_product_query')) {
+        if (!virabot_other_enabled()) {
+            telegram('answerCallbackQuery', ['callback_query_id' => $callback_query_id, 'text' => virabot_cat_t('other_disabled', 'این بخش غیرفعال است.'), 'show_alert' => true]);
+            return;
+        }
+        [$query, $vbParams] = virabot_other_product_query($userdate['name_panel'], $user['agent'], $vbMonth);
     } else {
-        $query = "SELECT * FROM product WHERE (Location = '{$userdate['name_panel']}' OR Location = '/all') AND agent= '{$user['agent']}' AND category = '$categorynames'";
+        $vbCatRow = select("category", "remark", "id", $categorynames, "select");
+        if (!$vbCatRow) {
+            telegram('answerCallbackQuery', ['callback_query_id' => $callback_query_id, 'text' => virabot_cat_t('cat_gone', 'این دسته دیگر وجود ندارد.'), 'show_alert' => true]);
+            return;
+        }
+        $categorynames = $vbCatRow['remark'];
+        $query = "SELECT * FROM product WHERE (Location = ? OR Location = '/all') AND agent = ? AND category = ?";
+        $vbParams = [$userdate['name_panel'], $user['agent'], $categorynames];
+        if ($vbMonth !== null) {
+            $query .= " AND Service_time = ?";
+            $vbParams[] = $vbMonth;
+        }
     }
     $marzban_list_get = select("marzban_panel", "*", "name_panel", $userdate['name_panel'], "select");
     $statuscustomvolume = json_decode($marzban_list_get['customvolume'], true)[$user['agent']];
@@ -3795,7 +3826,7 @@ if ($user['step'] == "createusertest" || $user['step'] == "createusertest_cx" ||
     } else {
         $statuscustom = false;
     }
-    Editmessagetext($from_id, $message_id, $textbotlang['users']['sell']['serviceSelectFirst'], KeyboardProduct($marzban_list_get['name_panel'], $query, $user['pricediscount'], $datakeyboard, $statuscustom));
+    Editmessagetext($from_id, $message_id, $textbotlang['users']['sell']['serviceSelectFirst'], KeyboardProduct($marzban_list_get['name_panel'], $query, $user['pricediscount'], $datakeyboard, $statuscustom, "backuser", null, "customsellvolume", $vbParams));
 } elseif (preg_match('/^productmonth_(\w+)/', $datain, $dataget)) {
     $monthenumber = $dataget[1];
     $userdate = json_decode($user['Processing_value'], true);
