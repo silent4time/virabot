@@ -419,6 +419,8 @@ $keyboard_Category_manage = json_encode([
     'keyboard' => [
         [['text' => $textbotlang['keyboard']['addCategory']], ['text' => $textbotlang['keyboard']['deleteCategory']]],
         [['text' => $textbotlang['keyboard']['editCategoryMenu']]],
+        [['text' => function_exists('virabot_cat_btn_bulk') ? virabot_cat_btn_bulk() : '☑️ انتخاب گروهی محصولات']],
+        [['text' => function_exists('virabot_cat_btn_other_toggle') ? virabot_cat_btn_other_toggle() : '📦 روشن/خاموش دکمه «سایر»']],
         [['text' => $textbotlang['keyboard']['backToShopMenu']]]
     ],
     'resize_keyboard' => true
@@ -1497,13 +1499,13 @@ $keyboardlinkapp = json_encode([
     ],
     'resize_keyboard' => true
 ]);
-function KeyboardProduct($location, $query, $pricediscount, $datakeyboard, $statuscustom = false, $backuser = "backuser", $valuetow = null, $customvolume = "customsellvolume")
+function KeyboardProduct($location, $query, $pricediscount, $datakeyboard, $statuscustom = false, $backuser = "backuser", $valuetow = null, $customvolume = "customsellvolume", $params = [])
 {
     global $pdo, $textbotlang, $from_id;
     $product = ['inline_keyboard' => []];
     $statusshowprice = select("shopSetting", "*", "Namevalue", "statusshowprice", "select")['value'];
     $stmt = $pdo->prepare($query);
-    $stmt->execute();
+    $stmt->execute(is_array($params) ? array_values($params) : []); // 5.6.0: optional bound params
     if ($valuetow != null) {
         $valuetow = "-$valuetow";
     } else {
@@ -1566,6 +1568,10 @@ function KeyboardCategory($location, $agent, $backuser = "backuser")
         if ($stmts->rowCount() == 0)
             continue;
         $list_category['inline_keyboard'][] = [['text' => $row['remark'], 'callback_data' => "categorynames_" . $row['id']]];
+    }
+    // Virabot 5.6.0: «📦 سایر» = products of this panel without a usable category
+    if (function_exists('virabot_other_enabled') && virabot_other_enabled() && virabot_other_has_location($location, $agent)) {
+        $list_category['inline_keyboard'][] = [['text' => virabot_other_button_text(), 'callback_data' => "categorynames_o"]];
     }
     $list_category['inline_keyboard'][] = [
         ['text' => $textbotlang['keyboard']['backToPreviousMenu'], "callback_data" => $backuser],
@@ -1689,7 +1695,9 @@ function KeyboardCategoryGlobal($agent, $backuser = "backuser")
         ORDER BY c.remark ASC");
     $stmt->execute([$agent]);
     $rows = $stmt->fetchAll(PDO::FETCH_ASSOC);
-    if (!$rows) {
+    // Virabot 5.6.0: «📦 سایر» for products without a usable category
+    $vbOther = function_exists('virabot_other_enabled') && virabot_other_enabled() && count(virabot_other_panels($agent)) > 0;
+    if (!$rows && !$vbOther) {
         // fallback: همه دسته‌ها
         $rows = $pdo->query("SELECT id, remark FROM category ORDER BY remark ASC")->fetchAll(PDO::FETCH_ASSOC);
     }
@@ -1697,6 +1705,11 @@ function KeyboardCategoryGlobal($agent, $backuser = "backuser")
         if ($row['remark'] === '' || $row['remark'] === null) continue;
         $list['inline_keyboard'][] = [
             ['text' => $row['remark'], 'callback_data' => 'catbuy_' . $row['id']],
+        ];
+    }
+    if ($vbOther) {
+        $list['inline_keyboard'][] = [
+            ['text' => virabot_other_button_text(), 'callback_data' => 'catbuy_o'],
         ];
     }
     $list['inline_keyboard'][] = [
@@ -1863,3 +1876,19 @@ function keyboard_list_text($lang)
     $keyboard_text['inline_keyboard'][] = [['text' => $textbotlang['bottext']['btn_close'], 'callback_data' => 'bt_close']];
     return json_encode($keyboard_text);
 }
+
+// Virabot 5.6.0: «🗂 دسته پیش‌فرض پنل» in every panel settings keyboard (before the back row)
+foreach (['optionMarzban', 'optionrebecca', 'optionibsng', 'option_mikrotik', 'options_ui', 'optionwg', 'optionmarzneshin', 'optionManualsale', 'option_connectix', 'option_eylan', 'optionX_ui_single', 'optionalireza_single', 'optionhiddfy', 'option_mirza'] as $__vbKb) {
+    if (!isset($$__vbKb) || !is_string($$__vbKb)) {
+        continue;
+    }
+    $__vbArr = json_decode($$__vbKb, true);
+    if (!is_array($__vbArr) || empty($__vbArr['keyboard'])) {
+        continue;
+    }
+    $__vbBack = array_pop($__vbArr['keyboard']);
+    $__vbArr['keyboard'][] = [['text' => function_exists('virabot_cat_btn_defcat') ? virabot_cat_btn_defcat() : '🗂 دسته پیش‌فرض پنل']];
+    $__vbArr['keyboard'][] = $__vbBack;
+    $$__vbKb = json_encode($__vbArr);
+}
+unset($__vbKb, $__vbArr, $__vbBack);

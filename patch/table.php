@@ -243,6 +243,8 @@ timeauto_not_verify,status_keyboard_config,cron_status
         addFieldToTable("setting", "on_hold_day", "4", "VARCHAR(100)");
         addFieldToTable("setting", "bulkbuy", "onbulk", "VARCHAR(100)");
         addFieldToTable("setting", "statuscategorygenral", "offcategorys", "VARCHAR(100)");
+        // Virabot 5.6.0: «📦 سایر» button in the purchase flow (on/off)
+        addFieldToTable("setting", "statusothercategory", "on", "VARCHAR(20)");
         addFieldToTable("setting", "cronvolumere", "5", "VARCHAR(100)");
         addFieldToTable("setting", "agentreqprice", "0", "VARCHAR(100)");
         addFieldToTable("setting", "statusnamecustom", "offnamecustom", "VARCHAR(100)");
@@ -391,7 +393,8 @@ try {
         on_hold_test varchar(60) NOT NULL,
         version_panel varchar(60) NOT NULL,
         customvolume TEXT NULL,
-        hide_user TEXT NULL)
+        hide_user TEXT NULL,
+        default_category varchar(400) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL)
         ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE utf8mb4_unicode_ci");
         if (!$result) {
             echo "table marzban_panel" . implode(' ', $pdo->errorInfo());
@@ -423,6 +426,8 @@ try {
             'n2' => "365"
         ));
         addFieldToTable("marzban_panel", "version_panel", "0", "VARCHAR(60)");
+        // Virabot 5.6.0: default category per panel (NULL = none)
+        addFieldToTable("marzban_panel", "default_category", null, "VARCHAR(400) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL");
         addFieldToTable("marzban_panel", "on_hold_test", "1", "VARCHAR(60)");
         addFieldToTable("marzban_panel", "proxies", null, "TEXT");
         addFieldToTable("marzban_panel", "inbounds", null, "TEXT");
