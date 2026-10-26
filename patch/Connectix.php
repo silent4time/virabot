@@ -21,8 +21,10 @@
  *
  * Product after sync:
  *   note     = plan UUID
- *   category = کانکتیکس
+ *   category = marzban_panel.default_category, else کانکتیکس (only when the
+ *              product has no category yet; a manual category is kept on resync)
  *   Location = name_panel
+ *   agent    = panel agent (f/n/n2), or one row per agent when panel agent = all
  */
 
 if (!function_exists('connectix_request')) {
@@ -718,7 +720,22 @@ function connectix_sync_products($namepanel)
     $added = 0;
     $updated = 0;
     $skipped = 0;
-    $category = 'کانکتیکس';
+    // Virabot 5.6.0: panel default category, else the legacy «کانکتیکس»; the category row always exists.
+    $category = function_exists('virabot_panel_default_category') ? virabot_panel_default_category($name) : '';
+    if ($category === '') {
+        $category = 'کانکتیکس';
+    }
+    if (function_exists('virabot_ensure_category')) {
+        virabot_ensure_category($category);
+    } else {
+        try {
+            $st = $pdo->prepare("INSERT INTO category (remark) SELECT ? FROM DUAL WHERE NOT EXISTS (SELECT 1 FROM category WHERE remark = ?)");
+            $st->execute([$category, $category]);
+        } catch (Throwable $e) {
+        }
+    }
+    $panelAgent = (string) ($panel['agent'] ?? 'all');
+    $agentsWanted = in_array($panelAgent, ['f', 'n', 'n2'], true) ? [$panelAgent] : ['f', 'n', 'n2'];
     $testPlanId = '';
     $testDays = 0;
     $testVol = 0;
@@ -781,35 +798,51 @@ function connectix_sync_products($namepanel)
             $vol = $vm[1];
         }
         $devices = intval(connectix_pick($plan, ['count_of_devices', 'devices', 'max_clients'], 1));
-        $code = substr(md5('cx|' . $name . '|' . $planId), 0, 10);
-
-        $existing = null;
+        // Virabot 5.6.0: one product row per agent (f / n / n2), following the manual-product pattern.
+        // Agent 'f' keeps the old code (compatible with existing rows); n / n2 get their own unique code.
+        $existingRows = [];
         try {
-            $st = $pdo->prepare("SELECT id, code_product FROM product WHERE note = :note AND Location = :loc LIMIT 1");
+            $st = $pdo->prepare("SELECT id, agent FROM product WHERE note = :note AND Location = :loc");
             $st->execute([':note' => $planId, ':loc' => $name]);
-            $existing = $st->fetch(PDO::FETCH_ASSOC);
+            $existingRows = $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
         } catch (Throwable $e) {
         }
+        $haveAgents = [];
+        foreach ($existingRows as $er) {
+            $haveAgents[(string) $er['agent']] = true;
+        }
 
-        if ($existing) {
+        if ($existingRows) {
             try {
-                $st = $pdo->prepare("UPDATE product SET name_product=:n, price_product=:p, Volume_constraint=:v, Service_time=:t, category=:c, max_users=:m WHERE id=:id");
+                // A category set by the admin is kept; only empty / legacy automatic values are replaced.
+                $st = $pdo->prepare("UPDATE product SET name_product=:n, price_product=:p, Volume_constraint=:v, Service_time=:t,
+                    category = IF(category IS NULL OR category = '' OR category = :legacy, :c, category), max_users=:m
+                    WHERE note = :note AND Location = :loc");
                 $st->execute([
                     ':n' => $title,
                     ':p' => $price,
                     ':v' => $vol,
                     ':t' => $days,
+                    ':legacy' => 'کانکتیکس',
                     ':c' => $category,
                     ':m' => (string) $devices,
-                    ':id' => $existing['id'],
+                    ':note' => $planId,
+                    ':loc' => $name,
                 ]);
                 $updated++;
             } catch (Throwable $e) {
                 error_log('connectix_sync update: ' . $e->getMessage());
             }
-        } else {
+        }
+        foreach ($agentsWanted as $ag) {
+            if (isset($haveAgents[$ag])) {
+                continue;
+            }
+            $code = ($ag === 'f')
+                ? substr(md5('cx|' . $name . '|' . $planId), 0, 10)
+                : substr(md5('cx|' . $name . '|' . $planId . '|' . $ag), 0, 10);
             try {
-                $st = $pdo->prepare("INSERT INTO product (name_product,code_product,price_product,Volume_constraint,Service_time,Location,agent,data_limit_reset,note,category,hide_panel,one_buy_status,max_users) VALUES (:n,:code,:p,:v,:t,:loc,'f','no_reset',:note,:c,'{}','0',:m)");
+                $st = $pdo->prepare("INSERT INTO product (name_product,code_product,price_product,Volume_constraint,Service_time,Location,agent,data_limit_reset,note,category,hide_panel,one_buy_status,max_users) VALUES (:n,:code,:p,:v,:t,:loc,:ag,'no_reset',:note,:c,'{}','0',:m)");
                 $st->execute([
                     ':n' => $title,
                     ':code' => $code,
@@ -817,6 +850,7 @@ function connectix_sync_products($namepanel)
                     ':v' => $vol,
                     ':t' => $days,
                     ':loc' => $name,
+                    ':ag' => $ag,
                     ':note' => $planId,
                     ':c' => $category,
                     ':m' => (string) max(1, $devices),
@@ -828,10 +862,7 @@ function connectix_sync_products($namepanel)
         }
     }
 
-    try {
-        $pdo->exec("UPDATE setting SET statuscategory='oncategory' WHERE statuscategory='offcategory' OR statuscategory IS NULL OR statuscategory=''");
-    } catch (Throwable $e) {
-    }
+    // Virabot 5.6.0: no longer forces setting.statuscategory = 'oncategory' (admin decides).
 
     if ($testPlanId !== '') {
         try {
