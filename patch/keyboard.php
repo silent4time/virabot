@@ -293,6 +293,7 @@ $setting_panel = json_encode([
         [['text' => $textbotlang['keyboard']['setTestAccountLimitAll']]],
         [['text' => $textbotlang['keyboard']['agentMembershipFee']], ['text' => $textbotlang['keyboard']['qrBackground']]],
         [['text' => $textbotlang['keyboard']['reWebhookAgentBots']]],
+        [['text' => $textbotlang['psync']['btn_menu'] ?? '🔄 همگام‌سازی کاربران پنل']],
         [['text' => $textbotlang['Admin']['backAdminBtn']], ['text' => $textbotlang['Admin']['backMenuBtn']]]
     ],
     'resize_keyboard' => true

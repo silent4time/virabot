@@ -845,7 +845,7 @@ apply_patch_files() {
     fi
   fi
 
-  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php; do
+  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php panel_sync.php sync_api.php panels.php; do
     if [[ -f "${src_patch}/${f}" ]]; then
       cp -f "${src_patch}/${f}" "${target}/${f}"
     else
@@ -1377,7 +1377,7 @@ do_update() {
   fi
 
   info "Applying patch files..."
-  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php; do
+  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php panel_sync.php sync_api.php panels.php; do
     if [[ -f "${src_patch}/${f}" ]]; then
       cp -f "${src_patch}/${f}" "${INSTALL_DIR}/${f}"
       ok "  $f"
@@ -1385,6 +1385,35 @@ do_update() {
       warn "  missing: $f"
     fi
   done
+  # Libraries the bot loads that live only in base/ (panel drivers, helpers).
+  # An update used to copy patch/ only, so changes to these never reached
+  # existing servers. config.php is never touched.
+  base_src="$(dirname "$src_patch")/base"
+  if [[ -d "$base_src" ]]; then
+    for f in Marzban.php Rebecca.php marzneshin.php x-ui_single.php alireza_single.php s_ui.php hiddify.php WGDashboard.php mikrotik.php ibsng.php mirza_agent.php jdf.php request.php; do
+      if [[ -f "${src_patch}/${f}" ]]; then
+        continue
+      elif [[ -f "${base_src}/${f}" ]]; then
+        cp -f "${base_src}/${f}" "${INSTALL_DIR}/${f}"
+        ok "  $f (base)"
+      else
+        warn "  missing: $f"
+      fi
+    done
+    if [[ -d "${base_src}/ibsng" ]]; then
+      mkdir -p "${INSTALL_DIR}/ibsng"
+      cp -a "${base_src}/ibsng/." "${INSTALL_DIR}/ibsng/"
+      ok "  ibsng/ (base)"
+    fi
+    # base cron jobs first; patch/cronbot below overrides them
+    if [[ -d "${base_src}/cronbot" ]]; then
+      mkdir -p "${INSTALL_DIR}/cronbot"
+      cp -f "${base_src}/cronbot/"*.php "${INSTALL_DIR}/cronbot/" 2>/dev/null || true
+      ok "  cronbot/ (base)"
+    fi
+  else
+    warn "  base/ not found in update package; base libraries not updated"
+  fi
   # cronbot (backup etc.)
   if [[ -d "${src_patch}/cronbot" ]]; then
     mkdir -p "${INSTALL_DIR}/cronbot"
