@@ -1392,14 +1392,18 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     } else {
         Editmessagetext($from_id, $message_id, $textbotlang['users']['status']['disabledconfig'], $bakinfos);
     }
-} elseif (preg_match('/extend_(\w+)/', $datain, $dataget)) {
+} elseif (preg_match('/^extend_(\w+)/', $datain, $dataget)) {
     $id_invoice = $dataget[1];
     $nameloc = select("invoice", "*", "id_invoice", $id_invoice, "select");
-    if ($nameloc == false) {
+    if ($nameloc == false || (string) $nameloc['id_user'] !== (string) $from_id) {
         sendmessage($from_id, $textbotlang['extracted']['index_php']['renewError'], null, 'HTML');
         return;
     }
     $marzban_list_get = select("marzban_panel", "*", "name_panel", $nameloc['Service_location'], "select");
+    if ($marzban_list_get == false) {
+        sendmessage($from_id, $textbotlang['extracted']['index_php']['renewError'], null, 'HTML');
+        return;
+    }
     if ($marzban_list_get['status_extend'] == "off_extend") {
         sendmessage($from_id, $textbotlang['extracted']['index_php']['renewNotSupportedPanel'], null, 'html');
         return;
@@ -1547,6 +1551,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     Editmessagetext($from_id, $message_id, $textbotlang['users']['extend']['selectservice'], $json_list_product_lists);
 } elseif (preg_match('/^serviceextendselect_(.*)/', $datain, $dataget) || $user['step'] == "getvolumecustomuserforextend" || $datain == "exntedagei") {
     $userdate = json_decode($user['Processing_value'], true);
+    update("user", "Processing_value_four", "0", "id", $from_id);
     $nameloc = select("invoice", "*", "id_invoice", $userdate['id_invoice'], "select");
     $marzban_list_get = select("marzban_panel", "*", "name_panel", $nameloc['Service_location'], "select");
     if ($user['step'] == "getvolumecustomuserforextend") {
@@ -1594,7 +1599,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $customtimevalueprice = $eextraprice[$user['agent']];
     if ($user['step'] == "getvolumecustomuserforextend") {
         $product['name_product'] = $nameloc['name_product'];
-        $product['code_product'] = "customvolume";
+        $product['code_product'] = "custom_volume";
         $product['note'] = "";
         $product['price_product'] = (intval($userdate['volume']) * $custompricevalue) + ($text * $customtimevalueprice);
         $product['Service_time'] = $text;
@@ -1694,7 +1699,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $custompricevalue = $eextraprice[$user['agent']];
     $eextraprice = json_decode($marzban_list_get['pricecustomtime'], true);
     $customtimevalueprice = $eextraprice[$user['agent']];
-    if ($nameloc['name_product'] == $textbotlang['extracted']['index_php']['customVolumeButton'] || $nameloc['name_product'] == $textbotlang['extracted']['index_php']['customServiceButton']) {
+    if (($userdate['code_product'] ?? '') == "custom_volume" || $nameloc['name_product'] == $textbotlang['extracted']['index_php']['customVolumeButton'] || $nameloc['name_product'] == $textbotlang['extracted']['index_php']['customServiceButton']) {
         $info_product['code_product'] = "pre";
         $info_product['name_product'] = $nameloc['name_product'];
         $info_product['price_product'] = ($userdate['data_limit'] * $custompricevalue) + ($userdate['time'] * $customtimevalueprice);
@@ -1714,6 +1719,9 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $info_product['Service_time'] = $textbotlang['users']['status']['unlimited'];
     if ($info_product['price_product'] < 0)
         $info_product['price_product'] = 0;
+    if (intval($user['pricediscount']) != 0) {
+        $info_product['price_product'] = round($info_product['price_product'] - ($info_product['price_product'] * $user['pricediscount']) / 100);
+    }
     $textextend = sprintf($textbotlang['hardcoded']['renewInvoiceCreated2'], $nameloc['username'], $info_product['name_product'], $info_product['price_product'], $info_product['Service_time'], $info_product['Volume_constraint'], $info_product['note'], $user['Balance']);
     $keyboardextend = json_encode([
         'inline_keyboard' => [
@@ -1723,20 +1731,38 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         ]
     ]);
     sendmessage($from_id, $textextend, $keyboardextend, 'HTML');
-    $parametrsendvalue = "dis_" . $text . "_" . $info_product['price_product'];
+    $parametrsendvalue = "dis_" . $text . "_" . $info_product['price_product'] . "|" . $userdate['code_product'];
     update("user", "Processing_value_four", $parametrsendvalue, "id", $from_id);
     step("home", $from_id);
 } elseif ($datain == "confirmserivce" || $datain == "confirmserdiscount") {
+    if (!virabot_payment_lock('extend_user_' . $from_id)) {
+        sendmessage($from_id, $textbotlang['extracted']['index_php']['renewError'], null, 'HTML');
+        return;
+    }
+    $userFresh = select("user", "*", "id", $from_id, "select", ['cache' => false]);
+    if (is_array($userFresh)) {
+        $user = $userFresh;
+    }
     Editmessagetext($from_id, $message_id, $text_inline, json_encode(['inline_keyboard' => []]));
-    $partsdic = explode("_", $user['Processing_value_four']);
+    if ($datain == "confirmserivce") {
+        update("user", "Processing_value_four", "0", "id", $from_id);
+        $user['Processing_value_four'] = "0";
+    }
+    $discountParts = explode("|", (string) $user['Processing_value_four'], 2);
+    $discountProduct = $discountParts[1] ?? null;
+    $partsdic = explode("_", $discountParts[0]);
     $userdata = json_decode($user['Processing_value'], true);
     $id_invoice = $userdata['id_invoice'];
     $nameloc = select("invoice", "*", "id_invoice", $id_invoice, "select");
-    if ($nameloc == false) {
+    if ($nameloc == false || (string) $nameloc['id_user'] !== (string) $from_id) {
         sendmessage($from_id, $textbotlang['extracted']['index_php']['renewError'], null, 'HTML');
         return;
     }
     $marzban_list_get = select("marzban_panel", "*", "name_panel", $nameloc['Service_location'], "select");
+    if ($marzban_list_get == false) {
+        sendmessage($from_id, $textbotlang['extracted']['index_php']['renewError'], null, 'HTML');
+        return;
+    }
     if ($marzban_list_get['status_extend'] == "off_extend") {
         sendmessage($from_id, $textbotlang['extracted']['index_php']['renewNotSupportedPanel'], null, 'html');
         return;
@@ -1745,8 +1771,8 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $custompricevalue = $eextraprice[$user['agent']];
     $eextraprice = json_decode($marzban_list_get['pricecustomtime'], true);
     $customtimevalueprice = $eextraprice[$user['agent']];
-    $randomString = bin2hex(random_bytes(2));
-    if ($nameloc['name_product'] == $textbotlang['extracted']['index_php']['customVolumeButton'] || $nameloc['name_product'] == $textbotlang['extracted']['index_php']['customServiceButton']) {
+    $randomString = bin2hex(random_bytes(4));
+    if (($userdata['code_product'] ?? '') == "custom_volume" || $nameloc['name_product'] == $textbotlang['extracted']['index_php']['customVolumeButton'] || $nameloc['name_product'] == $textbotlang['extracted']['index_php']['customServiceButton']) {
         $prodcut['code_product'] = "custom_volume";
         $prodcut['name_product'] = $nameloc['name_product'];
         $prodcut['price_product'] = ($userdata['data_limit'] * $custompricevalue) + ($userdata['time'] * $customtimevalueprice);
@@ -1768,15 +1794,39 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         return;
     }
     if ($datain == "confirmserdiscount") {
-        $SellDiscountlimit = select("DiscountSell", "*", "codeDiscount", $partsdic[1], "select");
-        if ($SellDiscountlimit != false) {
-            $pricelastextend = $partsdic[2];
+        $SellDiscountlimit = (($partsdic[0] ?? '') === "dis" && isset($partsdic[1])) ? select("DiscountSell", "*", "codeDiscount", $partsdic[1], "select", ['cache' => false]) : false;
+        $discountValid = $SellDiscountlimit != false
+            && $discountProduct !== null
+            && (string) $discountProduct === (string) ($userdata['code_product'] ?? '')
+            && !(intval($SellDiscountlimit['time']) != 0 && time() >= intval($SellDiscountlimit['time']))
+            && intval($SellDiscountlimit['limitDiscount']) > intval($SellDiscountlimit['usedDiscount']);
+        if ($discountValid) {
+            $stmt = $pdo->prepare("SELECT * FROM Giftcodeconsumed WHERE id_user = :from_id AND code = :code");
+            $stmt->execute([':from_id' => $from_id, ':code' => $partsdic[1]]);
+            if (intval($stmt->rowCount()) >= intval($SellDiscountlimit['useuser'])) {
+                $discountValid = false;
+            }
+        }
+        if (!$discountValid) {
+            update("user", "Processing_value_four", "0", "id", $from_id);
+            sendmessage($from_id, $textbotlang['users']['Discount']['errorLimit'], null, 'HTML');
+            return;
+        }
+        $pricelastextend = round($prodcut['price_product'] - ($SellDiscountlimit['price'] / 100) * $prodcut['price_product']);
+        if ($pricelastextend < 0) {
+            $pricelastextend = 0;
         }
     }
     if (intval($user['pricediscount']) != 0) {
         $result = ($pricelastextend * $user['pricediscount']) / 100;
         $pricelastextend = $pricelastextend - $result;
         sendmessage($from_id, sprintf($textbotlang['users']['Discount']['discountapplied'], $user['pricediscount']), null, 'HTML');
+    }
+    if (intval($user['maxbuyagent']) != 0 and $user['agent'] == "n2") {
+        if (($user['Balance'] - $pricelastextend) < intval("-" . $user['maxbuyagent'])) {
+            sendmessage($from_id, $textbotlang['users']['Balance']['maxpurchasereached'], null, 'HTML');
+            return;
+        }
     }
     $DataUserOut = $ManagePanel->DataUser($nameloc['Service_location'], $nameloc['username']);
     if ($user['Balance'] < $pricelastextend && $user['agent'] != "n2" && intval($pricelastextend) != 0) {
@@ -1820,30 +1870,6 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             return;
         }
     }
-    if ($datain == "confirmserdiscount") {
-        $SellDiscountlimit = select("DiscountSell", "*", "codeDiscount", $partsdic[1], "select");
-        if ($SellDiscountlimit != false) {
-            $value = intval($SellDiscountlimit['usedDiscount']) + 1;
-            update("DiscountSell", "usedDiscount", $value, "codeDiscount", $partsdic[1]);
-            $stmt = $pdo->prepare("INSERT INTO Giftcodeconsumed (id_user,code) VALUES (?,?)");
-            $stmt->execute([$from_id, $partsdic[1]]);
-            $text_report = strtr($textbotlang['extracted']['index_php']['discountCodeUsedNoticeRenew'], ['{username}' => $username, '{from_id}' => $from_id, '{discount_code}' => $partsdic[1]]);
-            if (strlen($setting['Channel_Report']) > 0) {
-                telegram('sendmessage', [
-                    'chat_id' => $setting['Channel_Report'],
-                    'message_thread_id' => $otherreport,
-                    'text' => $text_report,
-                    'parse_mode' => "HTML"
-                ]);
-            }
-        }
-    }
-    if (intval($user['maxbuyagent']) != 0 and $user['agent'] == "n2") {
-        if (($user['Balance'] - $pricelastextend) < intval("-" . $user['maxbuyagent'])) {
-            sendmessage($from_id, $textbotlang['users']['Balance']['maxpurchasereached'], null, 'HTML');
-            return;
-        }
-    }
     if ($nameloc['name_product'] == $textbotlang['hardcoded']['testServiceName2']) {
         update("invoice", "name_product", $prodcut['name_product'], "id_invoice", $nameloc['id_invoice']);
         update("invoice", "price_product", $prodcut['price_product'], "id_invoice", $nameloc['id_invoice']);
@@ -1873,8 +1899,8 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         $pricelastextend = $pricelastextend - $result;
         sendmessage($from_id, sprintf($textbotlang['hardcoded']['renewGiftCharged'], $result), null, 'HTML');
     }
-    $Balance_Low_user = $user['Balance'] - $pricelastextend;
-    update("user", "Balance", $Balance_Low_user, "id", $from_id);
+    $stmt = $pdo->prepare("UPDATE user SET Balance = Balance - ? WHERE id = ?");
+    $stmt->execute([$pricelastextend, $from_id]);
     $stmt = $pdo->prepare("INSERT IGNORE INTO service_other (id_user, username,value,type,time,price,output,status) VALUES (?, ?, ?, ?,?,?,?,?)");
     $dateacc = bot_date('Y/m/d H:i:s');
     $value = json_encode(array(
@@ -1890,6 +1916,26 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $extend_json = json_encode($extend);
     $stmt->execute([$from_id, $nameloc['username'], $value, $type, $dateacc, $prodcut['price_product'], $extend_json, $status]);
     update("invoice", "Status", "active", "id_invoice", $id_invoice);
+    if ($datain == "confirmserdiscount") {
+        $SellDiscountlimit = select("DiscountSell", "*", "codeDiscount", $partsdic[1], "select");
+        if ($SellDiscountlimit != false) {
+            $stmt = $pdo->prepare("UPDATE DiscountSell SET usedDiscount = usedDiscount + 1 WHERE codeDiscount = ?");
+            $stmt->execute([$partsdic[1]]);
+            $stmt = $pdo->prepare("INSERT INTO Giftcodeconsumed (id_user,code) VALUES (?,?)");
+            $stmt->execute([$from_id, $partsdic[1]]);
+            $text_report = strtr($textbotlang['extracted']['index_php']['discountCodeUsedNoticeRenew'], ['{username}' => $username, '{from_id}' => $from_id, '{discount_code}' => $partsdic[1]]);
+            if (strlen($setting['Channel_Report']) > 0) {
+                telegram('sendmessage', [
+                    'chat_id' => $setting['Channel_Report'],
+                    'message_thread_id' => $otherreport,
+                    'text' => $text_report,
+                    'parse_mode' => "HTML"
+                ]);
+            }
+        }
+    }
+    update("user", "Processing_value_four", "0", "id", $from_id);
+    update("user", "Processing_value", "0", "id", $from_id);
     if (intval($setting['scorestatus']) == 1 and !in_array($from_id, $admin_ids)) {
         sendmessage($from_id, $textbotlang['extracted']['index_php']['earned2Points'], null, 'html');
         $scorenew = $user['score'] + 2;
@@ -1928,9 +1974,13 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             'reply_markup' => $Response
         ]);
     }
-} elseif (preg_match('/changelink_(\w+)/', $datain, $dataget)) {
+} elseif (preg_match('/^changelink_(\w+)/', $datain, $dataget)) {
     $id_invoice = $dataget[1];
     $nameloc = select("invoice", "*", "id_invoice", $id_invoice, "select");
+    if ($nameloc == false || (string) $nameloc['id_user'] !== (string) $from_id) {
+        sendmessage($from_id, $textbotlang['extracted']['index_php']['renewError'], null, 'HTML');
+        return;
+    }
     $marzban_list_get = select("marzban_panel", "*", "name_panel", $nameloc['Service_location'], "select");
     $DataUserOut = $ManagePanel->DataUser($nameloc['Service_location'], $nameloc['username']);
     if ($DataUserOut['status'] == "Unsuccessful") {
@@ -1952,9 +2002,13 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         ]
     ]);
     Editmessagetext($from_id, $message_id, $textbotlang['users']['changeLink']['warnchange'], $keyboardextend);
-} elseif (preg_match('/confirmchange_(\w+)/', $datain, $dataget)) {
+} elseif (preg_match('/^confirmchange_(\w+)/', $datain, $dataget)) {
     $id_invoice = $dataget[1];
     $nameloc = select("invoice", "*", "id_invoice", $id_invoice, "select");
+    if ($nameloc == false || (string) $nameloc['id_user'] !== (string) $from_id) {
+        sendmessage($from_id, $textbotlang['extracted']['index_php']['renewError'], null, 'HTML');
+        return;
+    }
     $marzban_list_get = select("marzban_panel", "*", "name_panel", $nameloc['Service_location'], "select");
     $DataUserOut = $ManagePanel->Revoke_sub($nameloc['Service_location'], $nameloc['username']);
     if ($DataUserOut['status'] == "Unsuccessful") {
@@ -5899,6 +5953,10 @@ if (preg_match('/^sendresidcart-(.*)/', $datain, $dataget)) {
         return;
     }
     $payemntcheck = select("Payment_report", "*", "id_order", $dataget[1], "select");
+    if ($payemntcheck == false || (string) $payemntcheck['id_user'] !== (string) $from_id) {
+        sendmessage($from_id, $textbotlang['extracted']['index_php']['transactionExpired'], null, 'HTML');
+        return;
+    }
     if ($payemntcheck['payment_Status'] == "paid") {
         sendmessage($from_id, $textbotlang['extracted']['index_php']['transactionAlreadyConfirmed'], null, 'HTML');
         return;
@@ -5958,7 +6016,7 @@ if (preg_match('/^sendresidcart-(.*)/', $datain, $dataget)) {
     } elseif ($user['Processing_value_tow'] == "getextenduser") {
         $partsdic = explode("%", $user['Processing_value_one']);
         $usernamepanel = $partsdic[0];
-        $sql = "SELECT * FROM service_other WHERE username = :username  AND value  LIKE CONCAT('%', :value, '%') AND id_user = :id_user ";
+        $sql = "SELECT * FROM service_other WHERE username = :username  AND value  LIKE CONCAT('%', :value, '%') AND id_user = :id_user AND type = 'extend_user' ORDER BY id DESC LIMIT 1";
         $stmt = $pdo->prepare($sql);
         $stmt->bindParam(':username', $usernamepanel, PDO::PARAM_STR);
         $stmt->bindParam(':value', $partsdic[1], PDO::PARAM_STR);
@@ -6094,7 +6152,7 @@ if (preg_match('/^sendresidcart-(.*)/', $datain, $dataget)) {
     } elseif ($split_data[0] == "getextenduser") {
         $partsdic = explode("%", $split_data[1]);
         $usernamepanel = $partsdic[0];
-        $sql = "SELECT * FROM service_other WHERE username = :username  AND value  LIKE CONCAT('%', :value, '%') AND id_user = :id_user ";
+        $sql = "SELECT * FROM service_other WHERE username = :username  AND value  LIKE CONCAT('%', :value, '%') AND id_user = :id_user AND type = 'extend_user' ORDER BY id DESC LIMIT 1";
         $stmt = $pdo->prepare($sql);
         $stmt->bindParam(':username', $usernamepanel, PDO::PARAM_STR);
         $stmt->bindParam(':value', $partsdic[1], PDO::PARAM_STR);

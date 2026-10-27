@@ -744,6 +744,9 @@ function outputlink($text)
 function DirectPayment($order_id, $image = 'images.jpg')
 {
     global $pdo, $ManagePanel, $textbotlang, $keyboardextendfnished, $keyboard, $Confirm_pay, $from_id, $message_id;
+    if (function_exists('virabot_payment_lock') && !virabot_payment_lock($order_id)) {
+        return false;
+    }
     $buyreport = select("topicid", "idreport", "report", "buyreport", "select")['idreport'];
     $admin_ids = select("admin", "id_admin", null, null, "FETCH_COLUMN");
     $otherservice = select("topicid", "idreport", "report", "otherservice", "select")['idreport'];
@@ -975,7 +978,7 @@ function DirectPayment($order_id, $image = 'images.jpg')
         $balanceformatsell = number_format(select("user", "Balance", "id", $Balance_id['id'], "select")['Balance'], 0);
         $partsdic = explode("%", $steppay[1]);
         $usernamepanel = $partsdic[0];
-        $sql = "SELECT * FROM service_other WHERE username = :username  AND value  LIKE CONCAT('%', :value, '%') AND id_user = :id_user ";
+        $sql = "SELECT * FROM service_other WHERE username = :username  AND value  LIKE CONCAT('%', :value, '%') AND id_user = :id_user AND type = 'extend_user' AND status = 'unpaid' ORDER BY id DESC LIMIT 1";
         $stmt = $pdo->prepare($sql);
         $stmt->bindParam(':username', $usernamepanel, PDO::PARAM_STR);
         $stmt->bindParam(':value', $partsdic[1], PDO::PARAM_STR);
@@ -985,12 +988,27 @@ function DirectPayment($order_id, $image = 'images.jpg')
         $service_other = $data_order;
         if ($service_other == false) {
             sendmessage($Balance_id['id'], $textbotlang['hardcoded']['renewGenericError'], $keyboard, 'HTML');
-            return;
+            return false;
+        }
+        $claimStmt = $pdo->prepare("UPDATE service_other SET status = 'processing' WHERE id = ? AND status = 'unpaid'");
+        $claimStmt->execute([$data_order['id']]);
+        if ($claimStmt->rowCount() != 1) {
+            return false;
         }
         $service_other = json_decode($service_other['value'], true);
         $codeproduct = $service_other['code_product'];
-        $nameloc = select("invoice", "*", "username", $usernamepanel, "select");
-        $marzban_list_get = select("marzban_panel", "*", "name_panel", $nameloc['Service_location'], "select");
+        $stmt = $pdo->prepare("SELECT * FROM invoice WHERE username = ? AND id_user = ? LIMIT 1");
+        $stmt->execute([$usernamepanel, $Balance_id['id']]);
+        $nameloc = $stmt->fetch(PDO::FETCH_ASSOC);
+        if ($nameloc == false) {
+            $nameloc = select("invoice", "*", "username", $usernamepanel, "select");
+        }
+        $marzban_list_get = $nameloc ? select("marzban_panel", "*", "name_panel", $nameloc['Service_location'], "select") : false;
+        if ($nameloc == false || $marzban_list_get == false) {
+            update("service_other", "status", "unpaid", "id", $data_order['id']);
+            sendmessage($Balance_id['id'], $textbotlang['hardcoded']['renewGenericError'], $keyboard, 'HTML');
+            return false;
+        }
         if ($codeproduct == "custom_volume") {
             $prodcut['code_product'] = "custom_volume";
             $prodcut['name_product'] = $nameloc['name_product'];
@@ -1027,7 +1045,8 @@ function DirectPayment($order_id, $image = 'images.jpg')
                     'parse_mode' => "HTML"
                 ]);
             }
-            return;
+            update("service_other", "status", "unpaid", "id", $data_order['id']);
+            return false;
         }
 
         update("service_other", "output", json_encode($extend), "id", $data_order['id']);
@@ -1063,7 +1082,7 @@ function DirectPayment($order_id, $image = 'images.jpg')
         if ($Balance_id['agent'] == "f") {
             $valurcashbackextend = select("shopSetting", "*", "Namevalue", "chashbackextend", "select")['value'];
         } else {
-            $valurcashbackextend = json_decode(select("shopSetting", "*", "Namevalue", "chashbackextend_agent", "select")['value'], true)[$Balance_id['agenr']];
+            $valurcashbackextend = json_decode(select("shopSetting", "*", "Namevalue", "chashbackextend_agent", "select")['value'], true)[$Balance_id['agent']];
         }
         if (intval($valurcashbackextend) != 0) {
             $result = ($prodcut['price_product'] * $valurcashbackextend) / 100;
