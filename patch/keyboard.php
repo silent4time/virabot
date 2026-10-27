@@ -283,7 +283,7 @@ $NowPaymentsManage = json_encode([
     ],
     'resize_keyboard' => true
 ]);
-$setting_panel = json_encode([
+$setting_panel_arr = [
     'keyboard' => [
         [['text' => $textbotlang['keyboard']['featureStatus']]],
         [['text' => $textbotlang['keyboard']['botReports']], ['text' => $textbotlang['keyboard']['channelSettings']]],
@@ -293,11 +293,15 @@ $setting_panel = json_encode([
         [['text' => $textbotlang['keyboard']['setTestAccountLimitAll']]],
         [['text' => $textbotlang['keyboard']['agentMembershipFee']], ['text' => $textbotlang['keyboard']['qrBackground']]],
         [['text' => $textbotlang['keyboard']['reWebhookAgentBots']]],
-        [['text' => $textbotlang['psync']['btn_menu'] ?? '🔄 همگام‌سازی کاربران پنل']],
         [['text' => $textbotlang['Admin']['backAdminBtn']], ['text' => $textbotlang['Admin']['backMenuBtn']]]
     ],
     'resize_keyboard' => true
-]);
+];
+// v5.7.1: show the sync button only when panel_sync.php is really loaded (otherwise the tap was silently ignored)
+if (function_exists('virabot_psync_admin_handle')) {
+    array_splice($setting_panel_arr['keyboard'], count($setting_panel_arr['keyboard']) - 1, 0, [[['text' => $textbotlang['psync']['btn_menu'] ?? '🔄 همگام‌سازی کاربران پنل']]]);
+}
+$setting_panel = json_encode($setting_panel_arr);
 $PaySettingcard = getPaySettingValue("Cartstatus");
 $PaySettingnow = getPaySettingValue("nowpaymentstatus");
 $PaySettingaqayepardakht = getPaySettingValue("statusaqayepardakht");

@@ -1376,6 +1376,25 @@ do_update() {
     return 1
   fi
 
+  # v5.7.1: an older installed/cached manage.sh does not know newer files
+  # (e.g. panel_sync.php in 5.7.0 never got copied). If the update source has
+  # a different manage.sh, restart the update with it (once).
+  local src_root_ms
+  src_root_ms="$(dirname "$src_patch")/manage.sh"
+  if [[ "${VB_UPDATE_REEXEC:-}" != "1" && -f "$src_root_ms" ]] && bash -n "$src_root_ms" 2>/dev/null \
+     && ! cmp -s "$src_root_ms" "${SCRIPT_DIR}/manage.sh"; then
+    local cache_src="/opt/${PROJECT_NAME}-src"
+    if [[ -d "$cache_src" && "$(dirname "$src_patch")" != "$cache_src" ]]; then
+      cp -a "$(dirname "$src_patch")"/. "$cache_src"/ 2>/dev/null || true
+    fi
+    local new_ms="/tmp/${PROJECT_NAME}-manage-update.sh"
+    cp -f "$src_root_ms" "$new_ms" && chmod +x "$new_ms"
+    rm -rf "$tmp"
+    info "Newer manage.sh found in update source; restarting update with it..."
+    export VB_UPDATE_REEXEC=1
+    exec bash "$new_ms" update
+  fi
+
   info "Applying patch files..."
   for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php panel_sync.php sync_api.php panels.php; do
     if [[ -f "${src_patch}/${f}" ]]; then
@@ -1383,6 +1402,16 @@ do_update() {
       ok "  $f"
     else
       warn "  missing: $f"
+    fi
+  done
+  # Any other top-level patch/*.php (future new files) - never config/templates/snippets
+  for pf in "${src_patch}"/*.php; do
+    [[ -f "$pf" ]] || continue
+    f="$(basename "$pf")"
+    case "$f" in config.php|config.template.php|admin_connectix_snippet.php|lang-fa.php) continue ;; esac
+    if ! cmp -s "$pf" "${INSTALL_DIR}/${f}"; then
+      cp -f "$pf" "${INSTALL_DIR}/${f}"
+      ok "  $f (extra)"
     fi
   done
   # Libraries the bot loads that live only in base/ (panel drivers, helpers).
