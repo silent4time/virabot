@@ -17,6 +17,7 @@ $stmt->execute();
         foreach($users as $user){
         $invoice = select("invoice","*","username",$user['username'],"select");
         if($invoice == false )continue;
+        if(empty($invoice['id_user']) || $invoice['Status'] == "unclaimed")continue; // v5.7.0 panel-sync: ownerless rows
         if($invoice['Status'] == "send_on_hold")continue;
         $line  = $invoice['username'];
         $resultss = $invoice;
