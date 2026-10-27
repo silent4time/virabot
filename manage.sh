@@ -845,7 +845,7 @@ apply_patch_files() {
     fi
   fi
 
-  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php; do
+  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php panel_sync.php sync_api.php; do
     if [[ -f "${src_patch}/${f}" ]]; then
       cp -f "${src_patch}/${f}" "${target}/${f}"
     else
@@ -1377,7 +1377,7 @@ do_update() {
   fi
 
   info "Applying patch files..."
-  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php; do
+  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php panel_sync.php sync_api.php; do
     if [[ -f "${src_patch}/${f}" ]]; then
       cp -f "${src_patch}/${f}" "${INSTALL_DIR}/${f}"
       ok "  $f"
