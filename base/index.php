@@ -373,6 +373,7 @@ if ($user['joinchannel'] != "active") {
         }
     }
 }
+if (function_exists('virabot_psync_user_handle') && virabot_psync_user_handle()) return; // v5.7.0 panel sync claim
 if ($text == "/start" || $datain == "start" || $text == "start") {
     sendmessage($from_id, $textbotlang['users']['text_start'], $keyboard, "html");
     update("user", "Processing_value", "0", "id", $from_id);
@@ -471,6 +472,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     if ($setting['NotUser'] == "onnotuser") {
         $keyboardlists['inline_keyboard'][] = [['text' => $textbotlang['users']['page']['notusernameme'], 'callback_data' => 'notusernameme']];
     }
+    if (function_exists('virabot_psync_claim_button') && ($vbPsBtn = virabot_psync_claim_button())) $keyboardlists['inline_keyboard'][] = $vbPsBtn;
     $keyboardlists['inline_keyboard'][] = $pagination_buttons;
     $keyboardlists['inline_keyboard'][] = $backuser;
     $keyboard_json = json_encode($keyboardlists);
@@ -540,6 +542,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     if ($setting['NotUser'] == "onnotuser") {
         $keyboardlists['inline_keyboard'][] = [['text' => $textbotlang['users']['page']['notusernameme'], 'callback_data' => 'notusernameme']];
     }
+    if (function_exists('virabot_psync_claim_button') && ($vbPsBtn = virabot_psync_claim_button())) $keyboardlists['inline_keyboard'][] = $vbPsBtn;
     $keyboardlists['inline_keyboard'][] = $pagination_buttons;
     $keyboardlists['inline_keyboard'][] = $backuser;
     $keyboard_json = json_encode($keyboardlists);
@@ -606,6 +609,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     if ($setting['NotUser'] == "onnotuser") {
         $keyboardlists['inline_keyboard'][] = [['text' => $textbotlang['users']['page']['notusernameme'], 'callback_data' => 'notusernameme']];
     }
+    if (function_exists('virabot_psync_claim_button') && ($vbPsBtn = virabot_psync_claim_button())) $keyboardlists['inline_keyboard'][] = $vbPsBtn;
     $keyboardlists['inline_keyboard'][] = $pagination_buttons;
     $keyboardlists['inline_keyboard'][] = $backuser;
     $keyboard_json = json_encode($keyboardlists);
@@ -1197,7 +1201,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $id_invoice = $dataget[1];
     $nameloc = select("invoice", "*", "id_invoice", $id_invoice, "select");
     $marzban_list_get = select("marzban_panel", "*", "name_panel", $nameloc['Service_location'], "select");
-    $ManagePanel->RemoveUser($nameloc['Service_location'], $nameloc['username']);
+    vb_sync_remove_user($ManagePanel, $nameloc['Service_location'], $nameloc['username']);
     update('invoice', 'status', 'removebyuser', 'id_invoice', $id_invoice);
     $tetremove = sprintf($textbotlang['hardcoded']['adminUserDeletedService'], $nameloc['username']);
     if (strlen($setting['Channel_Report']) > 0) {
@@ -1834,6 +1838,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         update("invoice", "price_product", $prodcut['price_product'], "id_invoice", $nameloc['id_invoice']);
     }
     $extend = $ManagePanel->extend($marzban_list_get['Methodextend'], $prodcut['Volume_constraint'], $prodcut['Service_time'], $nameloc['username'], $prodcut['code_product'], $marzban_list_get['code_panel']);
+    if (!empty($extend['status']) && function_exists('vb_sync_renewed')) vb_sync_renewed($marzban_list_get['name_panel'], $nameloc['username'], $from_id);
     if ($extend['status'] == false) {
         $extend['msg'] = json_encode($extend['msg']);
         $textreports = sprintf($textbotlang['hardcoded']['renewServiceError'], $marzban_list_get['name_panel'], $nameloc['username'], $extend['msg']);
@@ -2343,10 +2348,10 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     $output = $DataUserOut['data_limit'] - $DataUserOut['used_traffic'];
     $RemainingVolume = $DataUserOut['data_limit'] ? formatBytes($output) : $textbotlang['extracted']['index_php']['unlimited'];
     if ($marzban_list_get['url_panel'] == $marzban_list_get_new['url_panel']) {
-        $remove = $ManagePanel->RemoveUser($nameloc['Service_location'], $nameloc['username']);
-        $dataoutput = $ManagePanel->createUser($marzban_list_get_new['name_panel'], "usertest", $DataUserOut['username'], $datac);
+        $remove = vb_sync_remove_user($ManagePanel, $nameloc['Service_location'], $nameloc['username']);
+        $dataoutput = vb_sync_create_user($ManagePanel, $marzban_list_get_new['name_panel'], "usertest", $DataUserOut['username'], $datac, $from_id);
     } else {
-        $dataoutput = $ManagePanel->createUser($marzban_list_get_new['name_panel'], "usertest", $DataUserOut['username'], $datac);
+        $dataoutput = vb_sync_create_user($ManagePanel, $marzban_list_get_new['name_panel'], "usertest", $DataUserOut['username'], $datac, $from_id);
         if ($dataoutput['username'] == null) {
             $dataoutput['msg'] = json_encode($dataoutput['msg']);
             sendmessage($from_id, $textbotlang['users']['sell']['errorConfig'], $keyboard, 'HTML');
@@ -2361,7 +2366,7 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
             }
             return;
         }
-        $remove = $ManagePanel->RemoveUser($nameloc['Service_location'], $nameloc['username']);
+        $remove = vb_sync_remove_user($ManagePanel, $nameloc['Service_location'], $nameloc['username']);
     }
     $output_config_link = "";
     if ($marzban_list_get_new['sublink'] == "onsublink") {
@@ -3005,7 +3010,7 @@ if ($user['step'] == "createusertest" || preg_match('/locationtest_(.*)/', $data
     $info_product['price_product'] = "0";
     $Status = "active";
     $stmt->execute([$from_id, $randomString, $username_ac, $date, $marzban_list_get['name_panel'], $info_product['name_product'], $info_product['price_product'], $marzban_list_get['val_usertest'], $marzban_list_get['time_usertest'], $Status, $notifctions]);
-    $dataoutput = $ManagePanel->createUser($marzban_list_get['name_panel'], "usertest", $username_ac, $datac);
+    $dataoutput = vb_sync_create_user($ManagePanel, $marzban_list_get['name_panel'], "usertest", $username_ac, $datac, $from_id);
     if ($dataoutput['username'] == null) {
         $dataoutput['msg'] = json_encode($dataoutput['msg']);
         sendmessage($from_id, $textbotlang['users']['usertest']['errorcreat'], $keyboard, 'html');
@@ -3981,7 +3986,7 @@ if ($user['step'] == "createusertest" || preg_match('/locationtest_(.*)/', $data
             ]
         ]
     ];
-    $dataoutput = $ManagePanel->createUser($marzban_list_get['name_panel'], $info_product['code_product'], $username_ac, $datac);
+    $dataoutput = vb_sync_create_user($ManagePanel, $marzban_list_get['name_panel'], $info_product['code_product'], $username_ac, $datac, $from_id);
     if (!isset($dataoutput['username']) || $dataoutput['username'] === null || $dataoutput['username'] === '') {
         $errorMessage = $dataoutput['msg'] ?? 'unknown error';
         if (is_array($errorMessage) || is_object($errorMessage)) {
@@ -4535,7 +4540,7 @@ if ($user['step'] == "createusertest" || preg_match('/locationtest_(.*)/', $data
         if (in_array($randomString, $id_invoice)) {
             $randomString = $random_number . $randomString;
         }
-        $dataoutput = $ManagePanel->createUser($marzban_list_get['name_panel'], $info_product['code_product'], $username_acc, $datac);
+        $dataoutput = vb_sync_create_user($ManagePanel, $marzban_list_get['name_panel'], $info_product['code_product'], $username_acc, $datac, $from_id);
         if ($dataoutput['username'] == null) {
             $dataoutput['msg'] = json_encode($dataoutput['msg']);
             sendmessage($from_id, $textbotlang['users']['sell']['errorConfig'], $keyboard, 'HTML');
@@ -6318,6 +6323,7 @@ if (preg_match('/^sendresidcart-(.*)/', $datain, $dataget)) {
             'callback_data' => 'backuser'
         ]
     ];
+    if (function_exists('virabot_psync_claim_button') && ($vbPsBtn = virabot_psync_claim_button())) $keyboardlists['inline_keyboard'][] = $vbPsBtn;
     $keyboardlists['inline_keyboard'][] = $pagination_buttons;
     $keyboardlists['inline_keyboard'][] = $backuser;
     $keyboard_json = json_encode($keyboardlists);
@@ -6383,6 +6389,7 @@ if (preg_match('/^sendresidcart-(.*)/', $datain, $dataget)) {
             'callback_data' => 'backuser'
         ]
     ];
+    if (function_exists('virabot_psync_claim_button') && ($vbPsBtn = virabot_psync_claim_button())) $keyboardlists['inline_keyboard'][] = $vbPsBtn;
     $keyboardlists['inline_keyboard'][] = $pagination_buttons;
     $keyboardlists['inline_keyboard'][] = $backuser;
     $keyboard_json = json_encode($keyboardlists);
@@ -6445,6 +6452,7 @@ if (preg_match('/^sendresidcart-(.*)/', $datain, $dataget)) {
             'callback_data' => 'backuser'
         ]
     ];
+    if (function_exists('virabot_psync_claim_button') && ($vbPsBtn = virabot_psync_claim_button())) $keyboardlists['inline_keyboard'][] = $vbPsBtn;
     $keyboardlists['inline_keyboard'][] = $pagination_buttons;
     $keyboardlists['inline_keyboard'][] = $backuser;
     $keyboard_json = json_encode($keyboardlists);
@@ -6654,6 +6662,7 @@ if (isset($update['message']['successful_payment'])) {
     $Balance_Low_user = $user['Balance'] - $prodcut['price_product'];
     update("user", "Balance", $Balance_Low_user, "id", $from_id);
     $extend = $ManagePanel->extend($marzban_list_get['Methodextend'], $prodcut['Volume_constraint'], $prodcut['Service_time'], $usernamePanelExtends, $prodcut['code_product'], $marzban_list_get['code_panel']);
+    if (!empty($extend['status']) && function_exists('vb_sync_renewed')) vb_sync_renewed($marzban_list_get['name_panel'], $usernamePanelExtends, $from_id);
     if ($extend['status'] == false) {
         $extend['msg'] = json_encode($extend['msg']);
         $textreports = sprintf($textbotlang['hardcoded']['renewServiceError2'], $marzban_list_get['name_panel'], $usernamePanelExtends, $extend['msg']);

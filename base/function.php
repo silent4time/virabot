@@ -798,7 +798,7 @@ function DirectPayment($order_id, $image = 'images.jpg')
             'username' => $Balance_id['username'],
             'type' => 'buy'
         );
-        $dataoutput = $ManagePanel->createUser($marzban_list_get['name_panel'], $info_product['code_product'], $username_ac, $datac);
+        $dataoutput = vb_sync_create_user($ManagePanel, $marzban_list_get['name_panel'], $info_product['code_product'], $username_ac, $datac, $Balance_id['id']);
         if ($dataoutput['username'] == null) {
             $dataoutput['msg'] = json_encode($dataoutput['msg']);
             $balance = $Balance_id['Balance'] + $Payment_report['price'];
@@ -1029,6 +1029,7 @@ function DirectPayment($order_id, $image = 'images.jpg')
         $Balance_Low_user = 0;
         update("user", "Balance", $Balance_Low_user, "id", $Balance_id['id']);
         $extend = $ManagePanel->extend($marzban_list_get['Methodextend'], $prodcut['Volume_constraint'], $prodcut['Service_time'], $nameloc['username'], $prodcut['code_product'], $marzban_list_get['code_panel']);
+        if (!empty($extend['status']) && function_exists('vb_sync_renewed')) vb_sync_renewed($marzban_list_get['name_panel'], $nameloc['username'], $Balance_id['id']);
         if ($extend['status'] == false) {
             $balance = $Balance_id['Balance'] + $Payment_report['price'];
             update("user", "Balance", $balance, "id", $Balance_id['id']);
@@ -1546,6 +1547,7 @@ function activecron()
         "*/2 * * * * curl https://$domainhosts/cronbot/gift.php",
         "*/30 * * * * curl https://$domainhosts/cronbot/expireagent.php",
         "*/15 * * * * curl https://$domainhosts/cronbot/on_hold.php",
+        "*/10 * * * * curl https://$domainhosts/cronbot/sync_panel_users.php",
         "*/2 * * * * curl https://$domainhosts/cronbot/configtest.php",
         "*/15 * * * * curl https://$domainhosts/cronbot/uptime_node.php",
         "*/15 * * * * curl https://$domainhosts/cronbot/uptime_panel.php",
@@ -2687,4 +2689,60 @@ function virabot_cat_admin_handle()
     return true;
 }
 
+}
+
+/* ===== v5.7.0 panel sync: central username ownership (see panel_sync.php, docs/SYNC_API.md) ===== */
+if (is_file(__DIR__ . '/panel_sync.php')) {
+    require_once __DIR__ . '/panel_sync.php';
+}
+if (!function_exists('vb_sync_create_user')) {
+    /** createUser + reserve/report in the ownership table. Sync failures never block a sale (fail-open), except a 409 conflict. */
+    function vb_sync_create_user($mp, $panelName, $code, $username, $datac, $ownerUserId = null)
+    {
+        $synced = function_exists('ps_reserve');
+        if ($synced) {
+            try {
+                if (!ps_reserve($panelName, $username, $ownerUserId)) {
+                    return ['username' => null, 'status' => 'Unsuccessful', 'msg' => 'sync: username reserved by another owner'];
+                }
+            } catch (Throwable $e) {
+                error_log('ps_reserve: ' . $e->getMessage());
+            }
+        }
+        $out = $mp->createUser($panelName, $code, $username, $datac);
+        if ($synced) {
+            try {
+                if (is_array($out) && !empty($out['username']) && ($out['status'] ?? '') !== 'Unsuccessful') {
+                    ps_report('buy', $panelName, $out['username'], $ownerUserId, ps_keys_from_output($out));
+                } else {
+                    ps_report('release', $panelName, $username, $ownerUserId);
+                }
+            } catch (Throwable $e) {
+                error_log('ps_report: ' . $e->getMessage());
+            }
+        }
+        return $out;
+    }
+    function vb_sync_remove_user($mp, $panelName, $username)
+    {
+        $out = $mp->RemoveUser($panelName, $username);
+        if (function_exists('ps_report')) {
+            try {
+                ps_report('delete', $panelName, $username);
+            } catch (Throwable $e) {
+                error_log('ps_report: ' . $e->getMessage());
+            }
+        }
+        return $out;
+    }
+    function vb_sync_renewed($panelName, $username, $ownerUserId = null)
+    {
+        if (function_exists('ps_report')) {
+            try {
+                ps_report('renew', $panelName, $username, $ownerUserId);
+            } catch (Throwable $e) {
+                error_log('ps_report: ' . $e->getMessage());
+            }
+        }
+    }
 }
