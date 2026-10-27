@@ -1330,6 +1330,8 @@ try {
 if ($check && $check->rowCount() != 0) {
     $pdo->exec("ALTER TABLE `user` DROP `ref_code`");
 }
+// v5.7.0 panel sync tables (panel_accounts, panel_account_keys, sync_clients, sync_settings)
+try { if (function_exists('ps_migrate')) ps_migrate($pdo); } catch (Throwable $e) { error_log('ps_migrate: ' . $e->getMessage()); }
 telegram('setwebhook', [
     'url' => "https://$domainhosts/index.php"
 ]);
