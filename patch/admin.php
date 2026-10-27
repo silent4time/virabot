@@ -3249,9 +3249,9 @@ $cfgBody2 = preg_replace(
         ));
         return;
     }
-    $sql = "SELECT * FROM Payment_report WHERE id_user = '{$Payment_report['id_user']}' AND payment_Status != 'paid' AND payment_Status != 'Unpaid' AND payment_Status != 'expire' AND payment_Status != 'reject' AND  (id_invoice  LIKE CONCAT('%','getconfigafterpay', '%') OR id_invoice  LIKE CONCAT('%','getextenduser', '%') OR id_invoice  LIKE CONCAT('%','getextravolumeuser', '%') OR id_invoice  LIKE CONCAT('%','getextratimeuser', '%'))";
+    $sql = "SELECT * FROM Payment_report WHERE id_user = :id_user AND payment_Status != 'paid' AND payment_Status != 'Unpaid' AND payment_Status != 'expire' AND payment_Status != 'reject' AND  (id_invoice  LIKE CONCAT('%','getconfigafterpay', '%') OR id_invoice  LIKE CONCAT('%','getextenduser', '%') OR id_invoice  LIKE CONCAT('%','getextravolumeuser', '%') OR id_invoice  LIKE CONCAT('%','getextratimeuser', '%'))";
     $stmt = $pdo->prepare($sql);
-    $stmt->execute();
+    $stmt->execute([':id_user' => $Payment_report['id_user']]);
     $countpay = $stmt->rowCount();
     $typepay = explode('|', $Payment_report['id_invoice']);
     if ($countpay > 0 and !in_array($typepay[0], ['getconfigafterpay', 'getextenduser', 'getextravolumeuser', 'getextratimeuser'])) {
@@ -3271,10 +3271,10 @@ $cfgBody2 = preg_replace(
         Editmessagetext($from_id, $message_id, $textconfrom, $Confirm_pay);
         return;
     }
-    DirectPayment($order_id);
+    $directPaymentResult = DirectPayment($order_id);
     $pricecashback = select("PaySetting", "ValuePay", "NamePay", "chashbackcart", "select")['ValuePay'];
-    $Balance_id = select("user", "*", "id", $Payment_report['id_user'], "select");
-    if ($pricecashback != "0") {
+    $Balance_id = select("user", "*", "id", $Payment_report['id_user'], "select", ['cache' => false]);
+    if ($pricecashback != "0" && $directPaymentResult !== false) {
         $result = ($Payment_report['price'] * $pricecashback) / 100;
         $Balance_confrim = intval($Balance_id['Balance']) + $result;
         update("user", "Balance", $Balance_confrim, "id", $Balance_id['id']);

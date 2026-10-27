@@ -1063,6 +1063,15 @@ class ManagePanel
                     );
                 }
             }
+        } elseif ($Get_Data_Panel['type'] == "connectix") {
+            if (function_exists('connectix_data_user')) {
+                $Output = connectix_data_user($Get_Data_Panel['name_panel'], $username);
+            } else {
+                $Output = array(
+                    'status' => 'Unsuccessful',
+                    'msg' => 'Connectix module not loaded'
+                );
+            }
         } else {
             $Output = array(
                 'status' => 'Unsuccessful',
@@ -2091,11 +2100,14 @@ class ManagePanel
         $inbound_id = isset($panel['inboundid']) ? $panel['inboundid'] : 1;
         $inbounds = is_string($panel['inbounds']) ? json_decode($panel['inbounds']) : "{}";
         $inbounds = $product['inbounds'] != null ? json_decode($product['inbounds']) : $inbounds;
-        if ($panel['type'] != "WGDashboard") {
-            update("invoice", 'user_info', null, "username", $username);
-        }
-        update("invoice", 'uuid', null, "username", $username);
-        update("invoice", 'Status', "active", "username", $username);
+        // v5.6.2: invoice fields are updated only after the panel confirmed the renewal
+        $vbAfterExtendOk = function () use ($panel, $username) {
+            if ($panel['type'] != "WGDashboard") {
+                update("invoice", 'user_info', null, "username", $username);
+            }
+            update("invoice", 'uuid', null, "username", $username);
+            update("invoice", 'Status', "active", "username", $username);
+        };
         if ($Method_extend == $textbotlang['keyboard']['resetVolumeTime']) {
             $reset = $this->ResetUserDataUsage($username, $panel['name_panel']);
             if ($reset['status'] == false) {
@@ -2213,6 +2225,7 @@ class ManagePanel
             if ($new_limit != 0) {
                 setjob($panel['name_panel'], "total_data", $data_limit_new / pow(1024, 3), $datauser['id']);
             }
+            $vbAfterExtendOk();
             return array(
                 'status' => true
             );
@@ -2251,6 +2264,7 @@ class ManagePanel
                     'msg' => $extend['msg']
                 );
             }
+            $vbAfterExtendOk();
             return array(
                 'status' => true,
                 'msg' => 'successful'
@@ -2268,6 +2282,7 @@ class ManagePanel
                 'msg' => $extend['msg']
             );
         }
+        $vbAfterExtendOk();
         return $extend;
     }
     function extra_volume($username_account, $code_panel, $limit_volume_new)

@@ -34,15 +34,19 @@ while ($row = $stmt->fetch(PDO::FETCH_ASSOC)) {
     if (in_array($Balance_id['id'], $list_Exceptions))
         continue;
     $textbotlang = languagechange();
-    if ($Payment_report['payment_Status'] == "paid") {
+    if (function_exists('virabot_payment_lock') && !virabot_payment_lock($Payment_report['id_order'])) {
+        continue;
+    }
+    $Payment_fresh = select("Payment_report", "*", "id_order", $Payment_report['id_order'], "select", ['cache' => false]);
+    if ($Payment_report['payment_Status'] == "paid" || ($Payment_fresh && $Payment_fresh['payment_Status'] == "paid")) {
         continue;
     }
     update("Payment_report", "payment_Status", "paid", "id_order", $Payment_report['id_order']);
     update("Payment_report", "dec_not_confirmed", $textbotlang['hardcoded']['autoConfirmedByBot'], "id_order", $Payment_report['id_order']);
-    DirectPayment($Payment_report['id_order'], "../images.jpg");
+    $directPaymentResult = DirectPayment($Payment_report['id_order'], "../images.jpg");
     $pricecashback = select("PaySetting", "ValuePay", "NamePay", "chashbackcart", "select")['ValuePay'];
-    $Balance_id = select("user", "*", "id", $Payment_report['id_user'], "select");
-    if ($pricecashback != "0") {
+    $Balance_id = select("user", "*", "id", $Payment_report['id_user'], "select", ['cache' => false]);
+    if ($pricecashback != "0" && $directPaymentResult !== false) {
         $result = ($Payment_report['price'] * $pricecashback) / 100;
         $Balance_confrim = intval($Balance_id['Balance']) + $result;
         update("user", "Balance", $Balance_confrim, "id", $Balance_id['id']);
