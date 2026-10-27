@@ -6,6 +6,8 @@ $text_panel_admin_login_template = sprintf($textbotlang['Admin']['adminphp']['ms
 if (!in_array($from_id, $admin_ids))
     return;
 // Virabot 5.6.0: category tools (bulk checkbox screen, «سایر» toggle, panel default category)
+if (function_exists('virabot_psync_admin_handle') && virabot_psync_admin_handle())
+    return;
 if (function_exists('virabot_cat_admin_handle') && virabot_cat_admin_handle())
     return;
 $domainhostsEscaped = htmlspecialchars($domainhosts, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
@@ -5474,7 +5476,7 @@ $cfgBody2 = preg_replace(
     $username = $dataget[1];
     $info_product = select("invoice", "*", "id_invoice", $username, "select");
     $DataUserOut = $ManagePanel->DataUser($info_product['Service_location'], $info_product['username']);
-    $ManagePanel->RemoveUser($info_product['Service_location'], $info_product['username']);
+    vb_sync_remove_user($ManagePanel, $info_product['Service_location'], $info_product['username']);
     update('invoice', 'status', 'removebyadmin', 'id_invoice', $username);
     sendmessage($from_id, $textbotlang['Admin']['manageUser']['removedService'], $keyboardadmin, 'HTML');
     Editmessagetext($from_id, $message_id, $text_inline, json_encode(['inline_keyboard' => []]));
@@ -5494,7 +5496,7 @@ $cfgBody2 = preg_replace(
             sendmessage($from_id, $textbotlang['Admin']['adminphp']['err_error_3'], $keyboardadmin, 'HTML');
         }
     }
-    $ManagePanel->RemoveUser($info_product['Service_location'], $info_product['username']);
+    vb_sync_remove_user($ManagePanel, $info_product['Service_location'], $info_product['username']);
     update('invoice', 'status', 'removebyadmin', 'id_invoice', $username);
     $Balance_user = select("user", "*", "id", $info_product['id_user'], "select");
     $Balance_add_user = $Balance_user['Balance'] + $info_product['price_product'];
@@ -6621,7 +6623,7 @@ $cfgBody2 = preg_replace(
         update("user", "Balance", $Balance_id_cancel_fee, "id", $nameloc['id_user']);
         sendmessage($nameloc['id_user'], sprintf($textbotlang['Admin']['adminphp']['msg_user_balance_amount_add_4'], $pricelast), null, 'HTML');
     }
-    $ManagePanel->RemoveUser($nameloc['Service_location'], $requestcheck['username']);
+    vb_sync_remove_user($ManagePanel, $nameloc['Service_location'], $requestcheck['username']);
     update("cancel_service", "status", "accept", "username", $requestcheck['username']);
     update("invoice", "status", "removedbyadmin", "username", $requestcheck['username']);
     sendmessage($from_id, sprintf($textbotlang['Admin']['adminphp']['err_user_balance_amount_add'], $pricelast), null, 'HTML');
@@ -6650,7 +6652,7 @@ $cfgBody2 = preg_replace(
         return;
     }
     $marzban_list_get = select("marzban_panel", "*", "name_panel", $invoice['Service_location'], "select");
-    $ManagePanel->RemoveUser($invoice['Service_location'], $requestcheck['username']);
+    vb_sync_remove_user($ManagePanel, $invoice['Service_location'], $requestcheck['username']);
     update("cancel_service", "status", "accept", "username", $requestcheck['username']);
     update("invoice", "status", "removedbyadmin", "username", $requestcheck['username']);
     sendmessage($invoice['id_user'], sprintf($textbotlang['Admin']['adminphp']['ok_user_delete_name_2'], $invoice['username']), null, 'HTML');
@@ -6875,7 +6877,7 @@ if ($datain == "settimecornremove" && $adminrulecheck['rule'] == "administrator"
             'username' => "",
             'type' => 'buy'
         );
-        $DataUserOut = $ManagePanel->createUser($user['Processing_value_tow'], $info_product['code_product'], $user['Processing_value_one'], $datac);
+        $DataUserOut = vb_sync_create_user($ManagePanel, $user['Processing_value_tow'], $info_product['code_product'], $user['Processing_value_one'], $datac, $user['Processing_value']);
         if ($DataUserOut['username'] == null) {
             sendmessage($from_id, $textbotlang['Admin']['adminphp']['err_error_group_report'], null, 'HTML');
             $DataUserOut['msg'] = json_encode($DataUserOut['msg']);
@@ -7300,7 +7302,7 @@ if ($datain == "settimecornremove" && $adminrulecheck['rule'] == "administrator"
     $panel = select("marzban_panel", "*", "name_panel", $userdata['idpanel'], "select");
     for ($i = 0; $i < $userdata['count']; $i++) {
         $usernameconfig = $user['Processing_value_one'] . "_" . $i;
-        $dataoutput = $ManagePanel->createUser($userdata['idpanel'], "usertest", $usernameconfig, $datac);
+        $dataoutput = vb_sync_create_user($ManagePanel, $userdata['idpanel'], "usertest", $usernameconfig, $datac, null);
         if ($dataoutput['username'] == null) {
             $dataoutput['msg'] = json_encode($dataoutput['msg']);
             sendmessage($from_id, $textbotlang['users']['sell']['errorConfig'], null, 'HTML');
@@ -9704,6 +9706,7 @@ elseif ($text == $textbotlang['keyboard']['hidePanelForUser'] && $adminrulecheck
     }
     deletemessage($from_id, $message_id);
     $extend = $ManagePanel->extend($marzban_list_get['Methodextend'], $prodcut['Volume_constraint'], $prodcut['Service_time'], $nameloc['username'], $prodcut['code_product'], $marzban_list_get['code_panel']);
+    if (!empty($extend['status']) && function_exists('vb_sync_renewed')) vb_sync_renewed($marzban_list_get['name_panel'], $nameloc['username'], ($nameloc['id_user'] ?? null));
     if ($extend['status'] == false) {
         $extend['msg'] = json_encode($extend['msg']);
         $textreports = sprintf($textbotlang['Admin']['adminphp']['err_error_panel_service_user'], $marzban_list_get['name_panel'], $nameloc['username'], $extend['msg']);
