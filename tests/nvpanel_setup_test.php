@@ -71,6 +71,11 @@ $GLOBALS['nvpanel_transport'] = static function (): array {
 $denied = nvpanel_setup_check_balance($probe);
 check(empty($denied['auth']) && $denied['reason'] === 'unauthorized', 'probe 401 does not count as success');
 unset($GLOBALS['nvpanel_transport']);
+$admin = file_get_contents(dirname(__DIR__) . '/patch/admin.php');
+$saveAt = strpos($admin, 'virabot_save_panel:');
+$insertAt = strpos($admin, 'INSERT INTO marzban_panel');
+$between = $saveAt !== false && $insertAt !== false ? substr($admin, $saveAt, $insertAt - $saveAt) : '';
+check(str_contains($between, "=== 'nvpanel'") && str_contains($between, 'Processing_value", "{}"') && str_contains($between, 'return;'), 'wizard cannot insert an active nvpanel');
 
 echo "\n$pass passed, $fail failed\n";
 exit($fail === 0 ? 0 : 1);

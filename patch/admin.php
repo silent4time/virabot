@@ -841,6 +841,13 @@ if (in_array($text, $textadmin) || $datain == "admin") {
     goto virabot_save_panel;
 } elseif ($user['step'] == "getlimitedpanel") {
     virabot_save_panel:
+    $userdata = json_decode($user['Processing_value'] ?? '{}', true) ?: [];
+    if (($userdata['type'] ?? '') === 'nvpanel') {
+        update("user", "Processing_value", "{}", "id", $from_id);
+        step('home', $from_id);
+        sendmessage($from_id, "پنل nvpanel از گفتگو ساخته نمی‌شود و توکن ذخیره نشد. در ترمینال ریشه:\n<code>sudo virabot nvpanel-setup</code>", $keyboardadmin, 'HTML');
+        return;
+    }
     savedata("save", "limitpanel", $text);
     $userdata = json_decode($user['Processing_value'], true);
     $randomString = bin2hex(random_bytes(2));
