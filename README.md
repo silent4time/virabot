@@ -499,8 +499,10 @@ Each install has its own file in `/etc/virabot/instances`. If more than one exis
 
 ## ⚙️ Install
 
+The repository is private. Put the zip on the server. A GitHub token in the environment is ignored.
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/silent4time/virabot/main/install.sh | sudo bash
+sudo bash install.sh /root/virabot-update.zip
 ```
 
 Choose **1) Install**. The script asks for the domain, Telegram token, Bale token, and database details.
