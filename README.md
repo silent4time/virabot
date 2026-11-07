@@ -221,8 +221,10 @@
 
 ## ⚙️ نصب
 
+برای مخزن خصوصی بسته را روی سرور بگذارید و توکن گیت‌هاب را به نصب‌کننده ندهید. اگر `GITHUB_TOKEN` در محیط باشد نادیده گرفته می‌شود:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/silent4time/virabot/main/install.sh | sudo bash
+sudo bash install.sh /root/virabot-update.zip
 ```
 
 از منو گزینه **1) Install** را بزنید. دامنه، توکن تلگرام، توکن بله و اطلاعات دیتابیس پرسیده می‌شود.
