@@ -4,4 +4,7 @@
 <Files "config.php">
     Require all denied
 </Files>
+<Files "nvpanel_setup.php">
+    Require all denied
+</Files>
 RedirectMatch 403 ^/(storage|cronbot|vendor|lang|ibsng|update-server)(/|$)

@@ -2086,6 +2086,25 @@ do_configure_platforms() {
 # ===========================================================================
 #  Help & Parameters (like official Mirza menu option 6)
 # ===========================================================================
+do_nvpanel_setup() {
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    err "nvpanel-setup needs a real terminal."
+    return 1
+  fi
+  local phpbin="" c
+  for c in "${SCRIPT_DIR}/patch/nvpanel_setup.php" "${SCRIPT_DIR}/nvpanel_setup.php"; do
+    if [[ -f "$c" ]]; then
+      phpbin="$c"
+      break
+    fi
+  done
+  if [[ -z "$phpbin" ]]; then
+    err "nvpanel_setup.php was not found."
+    return 1
+  fi
+  php "$phpbin"
+}
+
 do_help() {
   echo ""
   echo -e "${BOLD}=== Help & Parameters ===${NC}"
@@ -2101,6 +2120,8 @@ do_help() {
   echo "    reset     — Webhooks / tunnel / domain tools"
   echo "    renew     — Renew SSL certificate"
   echo "    status    — System status"
+  echo "    update-worker — Apply a queued update"
+  echo "    nvpanel-setup — Enter an NV Panel token on this terminal"
   echo "    help      — This screen"
   echo ""
   echo "  Paths:"
@@ -2459,6 +2480,7 @@ main() {
       exit $?
       ;;
     update-worker) do_update_worker; exit $? ;;
+    nvpanel-setup) do_nvpanel_setup; exit $? ;;
     migrate) do_migrate "${2:-}"; exit 0 ;;
     reset)   do_reset;   exit 0 ;;
     remove|uninstall) do_remove; exit 0 ;;

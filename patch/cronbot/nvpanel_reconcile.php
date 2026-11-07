@@ -18,7 +18,7 @@ foreach ($rows as $row) {
     $panel = $pdo->prepare('SELECT * FROM marzban_panel WHERE code_panel = ? AND type = ? LIMIT 1');
     $panel->execute([$row['panel_code'], 'nvpanel']);
     $p = $panel->fetch(PDO::FETCH_ASSOC);
-    if (!$p || !nvpanel_configured($p)) {
+    if (!$p || !nvpanel_sales_open($p)) {
         continue;
     }
     $res = nvpanel_request($p, 'GET', '/op/' . (int) $row['op_id'], null, 20);
@@ -48,7 +48,7 @@ if (!is_array($saved)) {
     $saved = [];
 }
 foreach ($panels as $p) {
-    if (!nvpanel_configured($p)) {
+    if (!nvpanel_sales_open($p)) {
         continue;
     }
     $res = nvpanel_request($p, 'GET', '/balance?cached=1', null, 15);

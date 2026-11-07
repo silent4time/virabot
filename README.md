@@ -245,6 +245,16 @@ sudo bash install.sh /root/virabot-update.zip update
 sudo virabot update-worker
 ```
 
+## 🔐 توکن nvpanel
+
+توکن مصرف‌کننده را در ربات نفرستید. روی خود سرور، با ریشه و ترمینال واقعی:
+
+```bash
+sudo virabot nvpanel-setup
+```
+
+پنل خاموش ذخیره می‌شود. راهنمای مصور در [docs/NVPANEL.md](docs/NVPANEL.md) است. توکن گیت‌هاب لازم نیست و این توکن می‌تواند خرید واقعی انجام دهد.
+
 ## 📋 منوی مدیریت
 
 <div align="center">
@@ -515,6 +525,16 @@ From 5.8.0 the bot reads the public stable GitHub release directly, with no toke
 sudo bash install.sh /root/virabot-update.zip update
 sudo virabot update-worker
 ```
+
+## NV Panel token
+
+Do not send the consumer token in the bot. On the server, as root, in a real terminal:
+
+```bash
+sudo virabot nvpanel-setup
+```
+
+The panel is stored disabled. Illustrated notes are in [docs/NVPANEL.md](docs/NVPANEL.md). This token can spend the representative wallet. It is not a GitHub token.
 
 ## 📋 Management menu
 
