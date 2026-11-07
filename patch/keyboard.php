@@ -1141,6 +1141,16 @@ $optionManualsale = json_encode([
     'resize_keyboard' => true
 ]);
 
+$option_nvpanel = json_encode([
+    'keyboard' => [
+        [['text' => 'شناسه محصول nvpanel']],
+        [['text' => $textbotlang['keyboard']['panelFeatureStatus']]],
+        [['text' => $textbotlang['keyboard']['panelName']], ['text' => $textbotlang['keyboard']['deletePanel']]],
+        [['text' => '🔑 ویرایش کلید API'], ['text' => $textbotlang['keyboard']['editPanelUrl']]],
+        [['text' => $textbotlang['Admin']['backAdminBtn']], ['text' => $textbotlang['Admin']['backMenuBtn']]]
+    ],
+    'resize_keyboard' => true
+], JSON_UNESCAPED_UNICODE);
 $option_connectix = json_encode([
     'keyboard' => [
         [['text' => '🔄 همگام پلن کانکتیکس']],
@@ -1341,7 +1351,8 @@ $keyboardtypepanel = json_encode([
             ['text' => 'EylanPanel', 'callback_data' => 'typepanel#eylan']
         ],
         [
-            ['text' => 'Connectix', 'callback_data' => 'typepanel#connectix']
+            ['text' => 'Connectix', 'callback_data' => 'typepanel#connectix'],
+            ['text' => 'NV Panel', 'callback_data' => 'typepanel#nvpanel']
         ],
         [
             ['text' => $textbotlang['Admin']['backAdminBtn'], 'callback_data' => 'admin']
@@ -1884,7 +1895,7 @@ function keyboard_list_text($lang)
 }
 
 // Virabot 5.6.0: «🗂 دسته پیش‌فرض پنل» in every panel settings keyboard (before the back row)
-foreach (['optionMarzban', 'optionrebecca', 'optionibsng', 'option_mikrotik', 'options_ui', 'optionwg', 'optionmarzneshin', 'optionManualsale', 'option_connectix', 'option_eylan', 'optionX_ui_single', 'optionalireza_single', 'optionhiddfy', 'option_mirza'] as $__vbKb) {
+foreach (['optionMarzban', 'optionrebecca', 'optionibsng', 'option_mikrotik', 'options_ui', 'optionwg', 'optionmarzneshin', 'optionManualsale', 'option_connectix', 'option_eylan', 'option_nvpanel', 'optionX_ui_single', 'optionalireza_single', 'optionhiddfy', 'option_mirza'] as $__vbKb) {
     if (!isset($$__vbKb) || !is_string($$__vbKb)) {
         continue;
     }

@@ -12,6 +12,8 @@ if (function_exists('virabot_cat_admin_handle') && virabot_cat_admin_handle())
     return;
 if (function_exists('vb_update_admin_handle') && vb_update_admin_handle())
     return;
+if (function_exists('nvpanel_admin_handle') && nvpanel_admin_handle())
+    return;
 $domainhostsEscaped = htmlspecialchars($domainhosts, ENT_QUOTES | ENT_SUBSTITUTE, 'UTF-8');
 
 $miniAppInstructionText = sprintf($textbotlang['Admin']['adminphp']['msg_mini_app_instruction'], $domainhostsEscaped);
@@ -9713,6 +9715,10 @@ elseif ($text == $textbotlang['keyboard']['hidePanelForUser'] && $adminrulecheck
         return;
     }
     deletemessage($from_id, $message_id);
+    if (($marzban_list_get['type'] ?? '') === 'nvpanel') {
+        sendmessage($from_id, 'تمدید دستی با حجم دلخواه برای nvpanel پشتیبانی نمی‌شود.', null, 'HTML');
+        return;
+    }
     $extend = $ManagePanel->extend($marzban_list_get['Methodextend'], $prodcut['Volume_constraint'], $prodcut['Service_time'], $nameloc['username'], $prodcut['code_product'], $marzban_list_get['code_panel']);
     if (!empty($extend['status']) && function_exists('vb_sync_renewed')) vb_sync_renewed($marzban_list_get['name_panel'], $nameloc['username'], ($nameloc['id_user'] ?? null));
     if ($extend['status'] == false) {

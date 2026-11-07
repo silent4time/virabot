@@ -522,6 +522,7 @@ try {
         addFieldToTable("product", "agent", "f", "varchar(50)");
         addFieldToTable("product", "max_users", "1", "VARCHAR(20)");
         addFieldToTable("product", "code_product", null, "varchar(50)");
+        addFieldToTable("product", "nv_product_id", null, "VARCHAR(64)");
     }
 } catch (Exception $e) {
     file_put_contents('error_log', $e->getMessage());

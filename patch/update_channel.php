@@ -1,7 +1,7 @@
 <?php
 /**
- * Installed-bot side of the update channel.
- * Talks only to the operator's update server. No GitHub token and no GitHub host.
+ * Public GitHub release updater for an installed Virabot.
+ * Unauthenticated. No token is read, sent, or stored.
  */
 declare(strict_types=1);
 
@@ -12,34 +12,10 @@ function vb_update_button_label(): string
     return '🔄 به‌روزرسانی ویرابات';
 }
 
-function vb_update_normalize_settings(string $url, string $key): array
-{
-    $url = trim($url);
-    $key = trim($key);
-    $ok = vb_update_client_base_ok($url) && vb_update_client_key_ok($key);
-    return [
-        'enabled' => $ok,
-        'url' => $ok ? 'https://' . strtolower((string) parse_url($url, PHP_URL_HOST)) : '',
-        'key' => $ok ? $key : '',
-    ];
-}
-
-function vb_update_settings(): array
-{
-    global $UPDATE_SERVER_URL, $UPDATE_CLIENT_KEY;
-    return vb_update_normalize_settings(
-        (string) ($UPDATE_SERVER_URL ?? ''),
-        (string) ($UPDATE_CLIENT_KEY ?? '')
-    );
-}
-
 function vb_update_local_version(string $root): string
 {
     $file = $root . '/VERSION';
-    if (!is_file($file)) {
-        return '';
-    }
-    return trim((string) file_get_contents($file));
+    return is_file($file) ? trim((string) file_get_contents($file)) : '';
 }
 
 function vb_update_storage(string $root): string
@@ -48,14 +24,13 @@ function vb_update_storage(string $root): string
     if (!is_dir($dir)) {
         @mkdir($dir, 0750, true);
     }
-    $ht = $dir . '/.htaccess';
-    if (!is_file($ht)) {
-        @file_put_contents($ht, "Require all denied\n");
+    if (!is_file($dir . '/.htaccess')) {
+        @file_put_contents($dir . '/.htaccess', "Require all denied\n");
     }
     return $dir;
 }
 
-function vb_update_client_http(string $method, string $url, array $headers, int $timeout, array $hosts): array
+function vb_update_http(string $method, string $url, array $headers, int $timeout, array $hosts): array
 {
     $hook = $GLOBALS['vb_update_transport'] ?? null;
     if (is_callable($hook)) {
@@ -64,24 +39,125 @@ function vb_update_client_http(string $method, string $url, array $headers, int 
     return vb_update_http_request($method, $url, $headers, $timeout, $hosts);
 }
 
-/**
- * @return array{state:string,local:string,remote:string,message:string,error:string}
- */
+function vb_update_rate_blocked(string $root, int $now): bool
+{
+    $file = vb_update_storage($root) . '/github_rate.json';
+    if (!is_file($file)) {
+        return false;
+    }
+    $data = json_decode((string) file_get_contents($file), true);
+    return is_array($data) && (int) ($data['until'] ?? 0) > $now;
+}
+
+function vb_update_note_rate(string $root, array $headers, int $now): void
+{
+    $remain = $headers['x-ratelimit-remaining'] ?? null;
+    if ($remain === null || (int) $remain > 1) {
+        return;
+    }
+    $reset = (int) ($headers['x-ratelimit-reset'] ?? ($now + VB_UPDATE_CACHE_ERR));
+    file_put_contents(vb_update_storage($root) . '/github_rate.json', json_encode(['until' => max($reset, $now + 60)]), LOCK_EX);
+}
+
+/** @return array{ok:bool,error:string,version?:string,sha256?:string,cached_at?:int} */
+function vb_update_fetch_release(string $root, int $now): array
+{
+    if (vb_update_rate_blocked($root, $now)) {
+        return ['ok' => false, 'error' => 'rate_limit', 'cached_at' => $now];
+    }
+    $headers = [
+        'Accept' => 'application/vnd.github+json',
+        'User-Agent' => 'VirabotUpdate/5.8.0',
+        'X-GitHub-Api-Version' => '2022-11-28',
+    ];
+    $listUrl = 'https://api.github.com/repos/' . VB_UPDATE_REPO . '/releases?per_page=20';
+    $list = vb_update_http('GET', $listUrl, $headers, 20, ['api.github.com']);
+    vb_update_note_rate($root, $list['headers'] ?? [], $now);
+    if ((int) ($list['status'] ?? 0) === 403 || (int) ($list['status'] ?? 0) === 429) {
+        return ['ok' => false, 'error' => 'rate_limit', 'cached_at' => $now];
+    }
+    if ((int) ($list['status'] ?? 0) !== 200) {
+        return ['ok' => false, 'error' => 'github_list', 'cached_at' => $now];
+    }
+    $decoded = json_decode((string) ($list['body'] ?? ''), true);
+    if (!is_array($decoded)) {
+        return ['ok' => false, 'error' => 'github_list', 'cached_at' => $now];
+    }
+    $picked = vb_update_pick_release($decoded);
+    if (empty($picked['ok'])) {
+        return ['ok' => false, 'error' => (string) $picked['error'], 'cached_at' => $now];
+    }
+    $sumUrl = vb_update_asset_api_url((int) $picked['sum_id']);
+    $zipUrl = vb_update_asset_api_url((int) $picked['zip_id']);
+    if ($sumUrl === null || $zipUrl === null) {
+        return ['ok' => false, 'error' => 'unpinned', 'cached_at' => $now];
+    }
+    $sum = vb_update_download_asset($root, $sumUrl, $now);
+    if (empty($sum['ok'])) {
+        return ['ok' => false, 'error' => (string) ($sum['error'] ?? 'checksum_unavailable'), 'cached_at' => $now];
+    }
+    $expect = vb_update_parse_checksum((string) $sum['body']);
+    if ($expect === null) {
+        return ['ok' => false, 'error' => 'checksum_unavailable', 'cached_at' => $now];
+    }
+    $zip = vb_update_download_asset($root, $zipUrl, $now);
+    if (empty($zip['ok'])) {
+        return ['ok' => false, 'error' => (string) ($zip['error'] ?? 'download'), 'cached_at' => $now];
+    }
+    $actual = hash('sha256', (string) $zip['body']);
+    if (!hash_equals($expect, $actual)) {
+        return ['ok' => false, 'error' => 'integrity', 'cached_at' => $now];
+    }
+    $cache = [
+        'ok' => true,
+        'error' => '',
+        'version' => (string) $picked['version'],
+        'sha256' => $expect,
+        'cached_at' => $now,
+        'checksum_kind' => 'unsigned-sha256',
+    ];
+    $bin = vb_update_storage($root) . '/update-package.zip';
+    file_put_contents($bin, (string) $zip['body'], LOCK_EX);
+    @chmod($bin, 0640);
+    return $cache;
+}
+
+/** @return array{ok:bool,body?:string,error?:string} */
+function vb_update_download_asset(string $root, string $apiUrl, int $now): array
+{
+    $headers = [
+        'Accept' => 'application/octet-stream',
+        'User-Agent' => 'VirabotUpdate/5.8.0',
+    ];
+    $first = vb_update_http('GET', $apiUrl, $headers, 30, ['api.github.com']);
+    vb_update_note_rate($root, $first['headers'] ?? [], $now);
+    $status = (int) ($first['status'] ?? 0);
+    if ($status >= 300 && $status < 400) {
+        $location = (string) ($first['headers']['location'] ?? '');
+        if (!vb_update_url_pinned($location, vb_update_redirect_hosts())) {
+            return ['ok' => false, 'error' => 'redirect_rejected'];
+        }
+        $host = strtolower((string) parse_url($location, PHP_URL_HOST));
+        $second = vb_update_http('GET', $location, [
+            'Accept' => 'application/octet-stream',
+            'User-Agent' => 'VirabotUpdate/5.8.0',
+        ], 180, [$host]);
+        if ((int) ($second['status'] ?? 0) !== 200 || (string) ($second['body'] ?? '') === '') {
+            return ['ok' => false, 'error' => 'download'];
+        }
+        return ['ok' => true, 'body' => (string) $second['body']];
+    }
+    if ($status !== 200 || (string) ($first['body'] ?? '') === '') {
+        return ['ok' => false, 'error' => 'download'];
+    }
+    return ['ok' => true, 'body' => (string) $first['body']];
+}
+
+/** @return array{state:string,local:string,remote:string,message:string,error:string} */
 function vb_update_availability(string $root, ?int $now = null): array
 {
     $now = $now ?? time();
     $local = vb_update_local_version($root);
-    $settings = vb_update_settings();
-    $base = [
-        'state' => 'disabled',
-        'local' => $local,
-        'remote' => '',
-        'message' => 'کانال به‌روزرسانی خاموش است. نشانی سرور و کلید کلاینت در پیکربندی خالی است و این نصب به گیت‌هاب وصل نمی‌شود.',
-        'error' => 'disabled',
-    ];
-    if (!$settings['enabled']) {
-        return $base;
-    }
     $cacheFile = vb_update_storage($root) . '/update_release_cache.json';
     $cache = null;
     if (is_file($cacheFile)) {
@@ -91,16 +167,22 @@ function vb_update_availability(string $root, ?int $now = null): array
         }
     }
     if (!is_array($cache) || !vb_update_cache_fresh($cache, $now)) {
-        $cache = vb_update_fetch_meta($settings, $now);
-        @file_put_contents($cacheFile, json_encode($cache, JSON_UNESCAPED_UNICODE), LOCK_EX);
-        @chmod($cacheFile, 0640);
+        $cache = vb_update_fetch_release($root, $now);
+        @file_put_contents($cacheFile, json_encode([
+            'ok' => !empty($cache['ok']),
+            'error' => (string) ($cache['error'] ?? ''),
+            'version' => (string) ($cache['version'] ?? ''),
+            'sha256' => (string) ($cache['sha256'] ?? ''),
+            'cached_at' => $now,
+            'checksum_kind' => 'unsigned-sha256',
+        ], JSON_UNESCAPED_UNICODE), LOCK_EX);
     }
     if (empty($cache['ok'])) {
         return [
             'state' => 'error',
             'local' => $local,
             'remote' => '',
-            'message' => 'بررسی نسخهٔ تازه ممکن نشد. نصب تغییری نکرده است.',
+            'message' => 'بررسی انتشار پایدار ممکن نشد. نصب انجام نشد. فایل جمع‌بررسی اگر نباشد، به‌روزرسانی رد می‌شود.',
             'error' => (string) ($cache['error'] ?? 'error'),
         ];
     }
@@ -110,7 +192,7 @@ function vb_update_availability(string $root, ?int $now = null): array
             'state' => 'available',
             'local' => $local,
             'remote' => $remote,
-            'message' => "نسخهٔ تازهٔ ویرابات آماده است: {$remote}\nنسخهٔ نصب‌شده: {$local}\nدکمهٔ تأیید، نصب را فقط در صف می‌گذارد. تا اجرای کارگر ریشه، فایل، پایگاه داده و پیکربندی دست نمی‌خورند.",
+            'message' => "نسخهٔ تازهٔ ویرابات آماده است: {$remote}\nنسخهٔ نصب‌شده: {$local}\nجمع‌بررسی SHA-256 کنار بسته است و امضای ناشر نیست.\nدکمه فقط درخواست را در صف می‌گذارد.",
             'error' => '',
         ];
     }
@@ -118,111 +200,11 @@ function vb_update_availability(string $root, ?int $now = null): array
         'state' => 'current',
         'local' => $local,
         'remote' => $remote,
-        'message' => "نسخهٔ نصب‌شده ({$local}) از نسخهٔ پایدار منتشرشده عقب نیست.",
+        'message' => "نسخهٔ نصب‌شده ({$local}) از انتشار پایدار عقب نیست.",
         'error' => '',
     ];
 }
 
-function vb_update_fetch_meta(array $settings, int $now): array
-{
-    $url = vb_update_join_pinned($settings['url'], '/v1/release', []);
-    if ($url === null) {
-        return ['ok' => false, 'error' => 'unpinned', 'cached_at' => $now];
-    }
-    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
-    $res = vb_update_client_http('GET', $url, [
-        'Authorization' => 'Bearer ' . $settings['key'],
-        'Accept' => 'application/json',
-        'User-Agent' => 'VirabotUpdateClient/5.8.0',
-    ], 20, [$host]);
-    if ((int) ($res['status'] ?? 0) !== 200) {
-        return ['ok' => false, 'error' => 'server', 'cached_at' => $now];
-    }
-    $data = json_decode((string) ($res['body'] ?? ''), true);
-    if (!is_array($data) || empty($data['ok'])) {
-        return ['ok' => false, 'error' => (string) ($data['error'] ?? 'server'), 'cached_at' => $now];
-    }
-    $version = (string) ($data['version'] ?? '');
-    $sha = strtolower((string) ($data['sha256'] ?? ''));
-    if (vb_update_semver_parse($version) === null || !preg_match('/^[a-f0-9]{64}$/', $sha)) {
-        return ['ok' => false, 'error' => 'meta', 'cached_at' => $now];
-    }
-    $dl = is_array($data['download'] ?? null) ? $data['download'] : [];
-    return [
-        'ok' => true,
-        'error' => '',
-        'version' => $version,
-        'sha256' => $sha,
-        'size' => (int) ($data['size'] ?? 0),
-        'asset' => VB_UPDATE_ASSET,
-        'cached_at' => $now,
-        'download' => [
-            'path' => '/v1/download',
-            'exp' => (int) ($dl['exp'] ?? 0),
-            'nonce' => (string) ($dl['nonce'] ?? ''),
-            'ver' => (string) ($dl['ver'] ?? ''),
-            'sig' => (string) ($dl['sig'] ?? ''),
-        ],
-    ];
-}
-
-/**
- * Download the package described by a fresh metadata document into $destZip.
- *
- * @return array{ok:bool,error:string}
- */
-function vb_update_download_package(array $settings, array $meta, string $destZip): array
-{
-    $dl = is_array($meta['download'] ?? null) ? $meta['download'] : [];
-    $query = [
-        'exp' => (string) ($dl['exp'] ?? ''),
-        'nonce' => (string) ($dl['nonce'] ?? ''),
-        'ver' => (string) ($dl['ver'] ?? ''),
-        'sig' => (string) ($dl['sig'] ?? ''),
-    ];
-    if (($query['ver'] ?? '') !== (string) ($meta['version'] ?? '')) {
-        return ['ok' => false, 'error' => 'meta'];
-    }
-    $url = vb_update_join_pinned($settings['url'], '/v1/download', $query);
-    if ($url === null) {
-        return ['ok' => false, 'error' => 'unpinned'];
-    }
-    $host = strtolower((string) parse_url($url, PHP_URL_HOST));
-    $res = vb_update_client_http('GET', $url, [
-        'Authorization' => 'Bearer ' . $settings['key'],
-        'Accept' => 'application/octet-stream',
-        'User-Agent' => 'VirabotUpdateClient/5.8.0',
-    ], 180, [$host]);
-    if ((int) ($res['status'] ?? 0) !== 200) {
-        return ['ok' => false, 'error' => 'download'];
-    }
-    $body = (string) ($res['body'] ?? '');
-    $sha = hash('sha256', $body);
-    if (!hash_equals(strtolower((string) $meta['sha256']), $sha)) {
-        return ['ok' => false, 'error' => 'integrity'];
-    }
-    $headerSha = strtolower((string) ($res['headers']['x-content-sha256'] ?? ''));
-    if ($headerSha !== '' && !hash_equals($sha, $headerSha)) {
-        return ['ok' => false, 'error' => 'integrity'];
-    }
-    if (file_put_contents($destZip, $body, LOCK_EX) === false) {
-        return ['ok' => false, 'error' => 'write'];
-    }
-    return ['ok' => true, 'error' => ''];
-}
-
-function vb_update_temp_dest_ok(string $dest): bool
-{
-    $real = realpath($dest);
-    if ($real === false || !is_dir($real)) {
-        return false;
-    }
-    return str_starts_with($real, '/tmp/');
-}
-
-/**
- * @return array{ok:bool,error:string,id?:string}
- */
 function vb_update_issue_nonce(string $root, string $adminId, string $version, int $now): array
 {
     if (vb_update_semver_parse($version) === null || !preg_match('/^-?[0-9]{1,20}$/', $adminId)) {
@@ -234,15 +216,10 @@ function vb_update_issue_nonce(string $root, string $adminId, string $version, i
         @mkdir($dir, 0750, true);
     }
     $rec = ['admin' => $adminId, 'version' => $version, 'exp' => $now + VB_UPDATE_NONCE_TTL, 'used' => false];
-    if (file_put_contents($dir . '/' . $id . '.json', json_encode($rec), LOCK_EX) === false) {
-        return ['ok' => false, 'error' => 'storage'];
-    }
+    file_put_contents($dir . '/' . $id . '.json', json_encode($rec), LOCK_EX);
     return ['ok' => true, 'error' => '', 'id' => $id];
 }
 
-/**
- * @return array{ok:bool,error:string,version?:string,admin?:string}
- */
 function vb_update_consume_nonce(string $root, string $id, int $now): array
 {
     if (!preg_match('/^[a-f0-9]{16}$/', $id)) {
@@ -258,10 +235,7 @@ function vb_update_consume_nonce(string $root, string $id, int $now): array
     }
     try {
         $rec = json_decode((string) stream_get_contents($fh), true);
-        if (!is_array($rec)) {
-            return ['ok' => false, 'error' => 'forbidden'];
-        }
-        if (!empty($rec['used'])) {
+        if (!is_array($rec) || !empty($rec['used'])) {
             return ['ok' => false, 'error' => 'replay'];
         }
         if ((int) ($rec['exp'] ?? 0) < $now) {
@@ -269,9 +243,6 @@ function vb_update_consume_nonce(string $root, string $id, int $now): array
         }
         if (vb_update_semver_parse((string) ($rec['version'] ?? '')) === null) {
             return ['ok' => false, 'error' => 'version'];
-        }
-        if (!preg_match('/^-?[0-9]{1,20}$/', (string) ($rec['admin'] ?? ''))) {
-            return ['ok' => false, 'error' => 'forbidden'];
         }
         $rec['used'] = true;
         rewind($fh);
@@ -285,19 +256,14 @@ function vb_update_consume_nonce(string $root, string $id, int $now): array
     }
 }
 
-/**
- * @param array{from_id:string,rule:string,in_admin_ids:bool} $admin
- * @return array{ok:bool,error:string}
- */
 function vb_update_enqueue(string $root, array $admin, string $version, int $now): array
 {
-    $nonce = [
+    $gate = vb_update_action_allowed($admin, [
         'admin' => (string) $admin['from_id'],
         'version' => $version,
         'exp' => $now + 60,
         'used' => false,
-    ];
-    $gate = vb_update_action_allowed($admin, $nonce, $now);
+    ], $now);
     if (empty($gate['ok'])) {
         return $gate;
     }
@@ -336,7 +302,7 @@ function vb_update_enqueue(string $root, array $admin, string $version, int $now
             return $check;
         }
         file_put_contents($dir . '/pending/' . $id . '.json', json_encode($job), LOCK_EX);
-        vb_update_write_status($root, 'queued', $version, 'queued');
+        vb_update_write_status($root, 'queued', $version, 'queued', false);
         return ['ok' => true, 'error' => ''];
     } finally {
         flock($lock, LOCK_UN);
@@ -344,23 +310,21 @@ function vb_update_enqueue(string $root, array $admin, string $version, int $now
     }
 }
 
-function vb_update_write_status(string $root, string $state, string $version, string $detail): void
+function vb_update_write_status(string $root, string $state, string $version, string $detail, bool $rolledBack): void
 {
-    $allowed = ['idle', 'queued', 'running', 'applied', 'failed'];
-    if (!in_array($state, $allowed, true)) {
+    if (!in_array($state, ['idle', 'queued', 'running', 'applied', 'failed'], true)) {
         $state = 'failed';
     }
     if (!preg_match('/^[a-z_]{1,40}$/', $detail)) {
         $detail = 'failed';
     }
-    $payload = [
+    file_put_contents(vb_update_storage($root) . '/update-status.json', json_encode([
         'state' => $state,
         'version' => $version,
         'detail' => $detail,
         'at' => time(),
-        'rolled_back' => $state === 'failed',
-    ];
-    file_put_contents(vb_update_storage($root) . '/update-status.json', json_encode($payload, JSON_UNESCAPED_UNICODE), LOCK_EX);
+        'rolled_back' => $rolledBack,
+    ], JSON_UNESCAPED_UNICODE), LOCK_EX);
 }
 
 function vb_update_status_text(string $root): string
@@ -373,23 +337,29 @@ function vb_update_status_text(string $root): string
     if (!is_array($data)) {
         return '';
     }
-    $map = [
-        'queued' => 'درخواست در صف است و هنوز نصب نشده.',
-        'running' => 'کارگر ریشه در حال نصب است.',
-        'applied' => 'آخرین نصب صف‌شده تمام شده است.',
-        'failed' => 'آخرین به‌روزرسانی ناموفق بود و موفقیت ثبت نشده. اگر برگشت انجام شده باشد فایل‌های کد قبلی سر جایشان هستند. پایگاه داده خودکار برنمی‌گردد.',
-    ];
-    $detail = (string) ($data['detail'] ?? '');
-    return $map[$detail] ?? ($map[(string) ($data['state'] ?? '')] ?? '');
+    $state = (string) ($data['state'] ?? '');
+    if ($state === 'queued') {
+        return 'درخواست در صف است و هنوز نصب نشده.';
+    }
+    if ($state === 'running') {
+        return 'کارگر ریشه در حال نصب است.';
+    }
+    if ($state === 'applied') {
+        return 'آخرین نصب صف‌شده تمام شده است.';
+    }
+    if ($state === 'failed' && !empty($data['rolled_back'])) {
+        return 'آخرین به‌روزرسانی ناموفق بود و فایل‌های کد از آرشیو برگشت. پایگاه داده خودکار برنگشته است.';
+    }
+    if ($state === 'failed') {
+        return 'آخرین به‌روزرسانی ناموفق بود و برگشت کامل تأیید نشد. موفقیت ثبت نشده. آرشیو کد در بکاپ ریشه است.';
+    }
+    return '';
 }
 
 function vb_update_admin_banner_text(string $root): string
 {
     $info = vb_update_availability($root);
-    if (($info['state'] ?? '') !== 'available') {
-        return '';
-    }
-    return $info['message'];
+    return ($info['state'] ?? '') === 'available' ? (string) $info['message'] : '';
 }
 
 function vb_update_admin_handle(): bool
@@ -436,8 +406,7 @@ function vb_update_admin_handle(): bool
             }
         }
         $extra = vb_update_status_text($root);
-        $msg = $info['message'] . ($extra !== '' ? "\n\n" . $extra : '');
-        sendmessage($from_id, $msg, $kb, 'HTML');
+        sendmessage($from_id, $info['message'] . ($extra !== '' ? "\n\n" . $extra : ''), $kb, 'HTML');
         return true;
     }
     if (preg_match('/^vbup_go_([a-f0-9]{16})$/', $data, $m)) {
@@ -446,7 +415,7 @@ function vb_update_admin_handle(): bool
             $err = (string) ($used['error'] ?? 'forbidden');
             $textErr = [
                 'replay' => 'این دکمه یک‌بار مصرف است و دوباره اجرا نمی‌شود.',
-                'expired' => 'مهلت این دکمه تمام شده. وضعیت را دوباره باز کنید.',
+                'expired' => 'مهلت این دکمه تمام شده.',
                 'forbidden' => 'این درخواست برای شما نیست.',
             ][$err] ?? 'درخواست رد شد.';
             if (function_exists('telegram')) {
@@ -461,10 +430,7 @@ function vb_update_admin_handle(): bool
         }
         $queued = vb_update_enqueue($root, $admin, (string) $used['version'], $now);
         if (!empty($queued['ok'])) {
-            $msg = 'درخواست به‌روزرسانی به نسخهٔ ' . $used['version'] . " در صف قرار گرفت.\n"
-                . "نصب وقتی انجام می‌شود که کارگر ریشه اجرا شود:\n"
-                . "<code>sudo virabot update-worker</code>\n"
-                . 'پرداخت، مالکیت سرویس‌ها و پیکربندی بازنویسی نمی‌شوند.';
+            $msg = 'درخواست به‌روزرسانی به نسخهٔ ' . $used['version'] . " در صف قرار گرفت.\nنصب وقتی انجام می‌شود که کارگر ریشه اجرا شود:\n<code>sudo virabot update-worker</code>";
         } elseif (($queued['error'] ?? '') === 'busy') {
             $msg = 'یک به‌روزرسانی در صف یا در حال اجراست.';
         } else {
@@ -494,15 +460,14 @@ function vb_update_push_notice(string $root): void
     if (is_array($flag) && (string) ($flag['version'] ?? '') === $info['remote']) {
         return;
     }
-    $pdo = $GLOBALS['pdo'];
-    $rows = $pdo->query("SELECT id_admin FROM admin WHERE rule = 'administrator'")->fetchAll(PDO::FETCH_COLUMN);
+    $rows = $GLOBALS['pdo']->query("SELECT id_admin FROM admin WHERE rule = 'administrator'")->fetchAll(PDO::FETCH_COLUMN);
     foreach ($rows as $id) {
         sendmessage($id, $info['message'], null, 'HTML');
     }
     file_put_contents($flagFile, json_encode(['version' => $info['remote'], 'at' => time()]), LOCK_EX);
 }
 
-function vb_update_mark_job(string $root, string $result): int
+function vb_update_mark_job(string $root, string $result, bool $rolledBack = false): int
 {
     if ($result !== 'applied' && $result !== 'failed') {
         return 1;
@@ -514,40 +479,84 @@ function vb_update_mark_job(string $root, string $result): int
     $path = $running[0];
     $job = json_decode((string) file_get_contents($path), true);
     if (!is_array($job)) {
-        vb_update_write_status($root, 'failed', '', 'schema');
+        vb_update_write_status($root, 'failed', '', 'schema', false);
         return 1;
     }
     $version = (string) ($job['version'] ?? '');
-    if ($result === 'applied') {
-        $installed = vb_update_local_version($root);
-        if ($installed !== $version || vb_update_semver_parse($installed) === null) {
-            $result = 'failed';
-        }
+    if ($result === 'applied' && vb_update_local_version($root) !== $version) {
+        $result = 'failed';
+        $rolledBack = false;
     }
-    $done = vb_update_storage($root) . '/update-queue/done/' . basename($path);
-    @rename($path, $done);
-    vb_update_write_status($root, $result === 'applied' ? 'applied' : 'failed', $version, $result === 'applied' ? 'applied' : 'failed');
+    @rename($path, vb_update_storage($root) . '/update-queue/done/' . basename($path));
+    vb_update_write_status($root, $result === 'applied' ? 'applied' : 'failed', $version, $result === 'applied' ? 'applied' : 'failed', $result === 'failed' && $rolledBack);
     return $result === 'applied' ? 0 : 1;
 }
 
-function vb_update_prepare_job(string $root, string $dest, int $now): int
+function vb_update_find_package(string $root): ?string
+{
+    if (is_file($root . '/patch/botapi.php') && is_file($root . '/manage.sh')) {
+        return $root;
+    }
+    foreach (glob($root . '/*', GLOB_ONLYDIR) ?: [] as $dir) {
+        if (is_file($dir . '/patch/botapi.php') && is_file($dir . '/manage.sh')) {
+            return $dir;
+        }
+    }
+    return null;
+}
+
+function vb_update_temp_dest_ok(string $dest): bool
+{
+    $real = realpath($dest);
+    return $real !== false && is_dir($real) && str_starts_with($real, '/tmp/');
+}
+
+function vb_update_materialize(string $root, string $dest, int $now, ?string $expectVersion): int
 {
     if (!vb_update_temp_dest_ok($dest)) {
         return 1;
     }
-    $settings = vb_update_settings();
-    if (!$settings['enabled']) {
-        vb_update_write_status($root, 'failed', '', 'disabled');
-        return 4;
+    $info = vb_update_availability($root, $now);
+    if (($info['state'] ?? '') === 'error') {
+        return 3;
     }
+    $cache = json_decode((string) @file_get_contents(vb_update_storage($root) . '/update_release_cache.json'), true);
+    if (!is_array($cache) || empty($cache['ok']) || !preg_match('/^[a-f0-9]{64}$/', (string) ($cache['sha256'] ?? ''))) {
+        return 3;
+    }
+    if ($expectVersion !== null && (string) $cache['version'] !== $expectVersion) {
+        return 3;
+    }
+    $zip = vb_update_storage($root) . '/update-package.zip';
+    if (!is_file($zip) || !hash_equals((string) $cache['sha256'], hash_file('sha256', $zip) ?: '')) {
+        return 3;
+    }
+    $extract = vb_update_extract_zip($zip, $dest . '/pkg');
+    if (empty($extract['ok'])) {
+        return 3;
+    }
+    $pkg = vb_update_find_package($dest . '/pkg');
+    if ($pkg === null || empty(vb_update_package_ok($pkg)['ok'])) {
+        return 3;
+    }
+    if (vb_update_local_version($pkg) !== (string) $cache['version']) {
+        return 3;
+    }
+    if ($pkg !== $dest . '/tree' && !@rename($pkg, $dest . '/tree')) {
+        return 3;
+    }
+    return is_file($dest . '/tree/patch/botapi.php') ? 0 : 3;
+}
+
+function vb_update_prepare_job(string $root, string $dest, int $now): int
+{
     $queue = vb_update_storage($root) . '/update-queue';
     $running = glob($queue . '/running/*.json') ?: [];
     if ($running !== []) {
-        $age = $now - (int) @filemtime($running[0]);
-        if ($age < 7200) {
+        if ($now - (int) @filemtime($running[0]) < 7200) {
             return 2;
         }
-        vb_update_mark_job($root, 'failed');
+        vb_update_mark_job($root, 'failed', false);
     }
     $pending = glob($queue . '/pending/*.json') ?: [];
     if ($pending === []) {
@@ -558,140 +567,29 @@ function vb_update_prepare_job(string $root, string $dest, int $now): int
         $jb = json_decode((string) file_get_contents($b), true);
         return ((int) ($ja['created'] ?? 0)) <=> ((int) ($jb['created'] ?? 0));
     });
-    $jobPath = $pending[0];
-    $job = json_decode((string) file_get_contents($jobPath), true);
+    $job = json_decode((string) file_get_contents($pending[0]), true);
     if (!is_array($job) || empty(vb_update_queue_validate($job, $now)['ok'])) {
-        @unlink($jobPath);
-        vb_update_write_status($root, 'failed', '', 'schema');
+        @unlink($pending[0]);
+        vb_update_write_status($root, 'failed', '', 'schema', false);
         return 3;
     }
-    $runningPath = $queue . '/running/' . basename($jobPath);
-    if (!@rename($jobPath, $runningPath)) {
+    if (!@rename($pending[0], $queue . '/running/' . basename($pending[0]))) {
         return 1;
     }
-    vb_update_write_status($root, 'running', (string) $job['version'], 'running');
-    $meta = vb_update_fetch_meta($settings, $now);
-    if (empty($meta['ok']) || (string) ($meta['version'] ?? '') !== (string) $job['version']) {
-        vb_update_mark_job($root, 'failed');
-        return 3;
+    vb_update_write_status($root, 'running', (string) $job['version'], 'running', false);
+    $rc = vb_update_materialize($root, $dest, $now, (string) $job['version']);
+    if ($rc !== 0) {
+        vb_update_mark_job($root, 'failed', false);
     }
-    $zip = $dest . '/package.zip';
-    $got = vb_update_download_package($settings, $meta, $zip);
-    if (empty($got['ok'])) {
-        vb_update_mark_job($root, 'failed');
-        return 3;
-    }
-    $extract = vb_update_extract_zip($zip, $dest . '/pkg');
-    @unlink($zip);
-    if (empty($extract['ok'])) {
-        vb_update_mark_job($root, 'failed');
-        return 3;
-    }
-    $pkg = vb_update_find_package($dest . '/pkg');
-    if ($pkg === null) {
-        vb_update_mark_job($root, 'failed');
-        return 3;
-    }
-    vb_update_sanitize_package($pkg);
-    $check = vb_update_package_ok($pkg);
-    if (empty($check['ok']) || vb_update_local_version($pkg) !== (string) $job['version']) {
-        vb_update_mark_job($root, 'failed');
-        return 3;
-    }
-    $live = $dest . '/tree';
-    if (is_dir($live)) {
-        vb_update_rrmdir($live);
-    }
-    if (!@rename($pkg, $live)) {
-        vb_update_mark_job($root, 'failed');
-        return 3;
-    }
-    return 0;
-}
-
-function vb_update_find_package(string $root): ?string
-{
-    if (is_file($root . '/patch/botapi.php') && is_file($root . '/manage.sh')) {
-        return $root;
-    }
-    $dirs = glob($root . '/*', GLOB_ONLYDIR) ?: [];
-    foreach ($dirs as $dir) {
-        if (is_file($dir . '/patch/botapi.php') && is_file($dir . '/manage.sh')) {
-            return $dir;
-        }
-    }
-    return null;
-}
-
-function vb_update_fetch_into(string $root, string $dest, int $now): int
-{
-    if (!vb_update_temp_dest_ok($dest)) {
-        return 1;
-    }
-    $settings = vb_update_settings();
-    if (!$settings['enabled']) {
-        return 4;
-    }
-    $meta = vb_update_fetch_meta($settings, $now);
-    if (empty($meta['ok'])) {
-        return 3;
-    }
-    $zip = $dest . '/package.zip';
-    $got = vb_update_download_package($settings, $meta, $zip);
-    if (empty($got['ok'])) {
-        return 3;
-    }
-    $extract = vb_update_extract_zip($zip, $dest . '/pkg');
-    @unlink($zip);
-    if (empty($extract['ok'])) {
-        return 3;
-    }
-    $pkg = vb_update_find_package($dest . '/pkg');
-    if ($pkg === null) {
-        return 3;
-    }
-    vb_update_sanitize_package($pkg);
-    if (empty(vb_update_package_ok($pkg)['ok'])) {
-        return 3;
-    }
-    if ($pkg !== $dest . '/tree') {
-        @rename($pkg, $dest . '/tree');
-    }
-    return is_file($dest . '/tree/patch/botapi.php') ? 0 : 3;
-}
-
-function vb_update_read_config_vars(string $root): array
-{
-    $file = $root . '/config.php';
-    if (!is_file($file)) {
-        return [];
-    }
-    $load = static function (string $path): array {
-        require $path;
-        return [
-            'url' => isset($UPDATE_SERVER_URL) ? (string) $UPDATE_SERVER_URL : '',
-            'key' => isset($UPDATE_CLIENT_KEY) ? (string) $UPDATE_CLIENT_KEY : '',
-            'dbhost' => isset($dbhost) ? (string) $dbhost : '',
-            'dbname' => isset($dbname) ? (string) $dbname : '',
-            'dbuser' => isset($usernamedb) ? (string) $usernamedb : '',
-            'dbpass' => isset($passworddb) ? (string) $passworddb : '',
-        ];
-    };
-    return $load($file);
+    return $rc;
 }
 
 function vb_update_cli(array $argv): void
 {
     $cmd = $argv[1] ?? '';
     $root = __DIR__;
-    if (is_file($root . '/config.php') && $cmd !== 'extract-zip') {
-        $vars = vb_update_read_config_vars($root);
-        $GLOBALS['UPDATE_SERVER_URL'] = $vars['url'] ?? '';
-        $GLOBALS['UPDATE_CLIENT_KEY'] = $vars['key'] ?? '';
-    }
     if ($cmd === 'fetch-into') {
-        $dest = $argv[2] ?? '';
-        exit(vb_update_fetch_into($root, $dest, time()));
+        exit(vb_update_materialize($root, $argv[2] ?? '', time(), null));
     }
     if ($cmd === 'fetch-job') {
         $dest = '';
@@ -703,13 +601,22 @@ function vb_update_cli(array $argv): void
         exit(vb_update_prepare_job($root, $dest, time()));
     }
     if ($cmd === 'mark-job') {
-        $result = $argv[2] ?? '';
-        exit(vb_update_mark_job($root, $result));
+        $arg = $argv[2] ?? '';
+        if ($arg === 'failed-rolled') {
+            exit(vb_update_mark_job($root, 'failed', true));
+        }
+        exit(vb_update_mark_job($root, $arg, false));
     }
     if ($cmd === 'extract-zip') {
         $zip = $argv[2] ?? '';
         $dest = $argv[3] ?? '';
-        if (!vb_update_temp_dest_ok($dest) || !is_file($zip)) {
+        $sum = $argv[4] ?? '';
+        if (!vb_update_temp_dest_ok($dest) || !is_file($zip) || !is_file($sum)) {
+            exit(1);
+        }
+        $expect = vb_update_parse_checksum((string) file_get_contents($sum));
+        $actual = hash_file('sha256', $zip) ?: '';
+        if ($expect === null || !hash_equals($expect, $actual)) {
             exit(1);
         }
         $res = vb_update_extract_zip($zip, $dest . '/out');
@@ -717,11 +624,7 @@ function vb_update_cli(array $argv): void
             exit(1);
         }
         $pkg = vb_update_find_package($dest . '/out');
-        if ($pkg === null) {
-            exit(1);
-        }
-        vb_update_sanitize_package($pkg);
-        if (empty(vb_update_package_ok($pkg)['ok'])) {
+        if ($pkg === null || empty(vb_update_package_ok($pkg)['ok'])) {
             exit(1);
         }
         if ($pkg !== $dest . '/tree') {
@@ -732,30 +635,33 @@ function vb_update_cli(array $argv): void
     if ($cmd === 'write-db-cnf') {
         $path = $argv[2] ?? '';
         $realParent = realpath(dirname($path));
-        $okParent = $realParent !== false && (str_starts_with($realParent, '/tmp/') || str_starts_with($realParent, '/root/virabot-backups'));
-        if (!$okParent) {
+        if ($realParent === false || (!str_starts_with($realParent, '/tmp/') && !str_starts_with($realParent, '/root/virabot-backups'))) {
             exit(1);
         }
-        $vars = vb_update_read_config_vars($root);
-        $dbname = (string) ($vars['dbname'] ?? '');
-        $dbuser = (string) ($vars['dbuser'] ?? '');
-        $dbpass = (string) ($vars['dbpass'] ?? '');
-        $dbhost = (string) ($vars['dbhost'] ?? 'localhost');
-        if (!preg_match('/^[A-Za-z0-9_]{1,64}$/', $dbname) || !preg_match('/^[A-Za-z0-9_]{1,64}$/', $dbuser)) {
+        if (!is_file($root . '/config.php')) {
             exit(1);
         }
-        if (str_contains($dbpass, "\n") || str_contains($dbpass, "\0")) {
-            exit(1);
-        }
-        $esc = static function (string $v): string {
-            return str_replace(['\\', '"'], ['\\\\', '\\"'], $v);
+        $load = static function (string $file): array {
+            require $file;
+            return [
+                'dbhost' => isset($dbhost) ? (string) $dbhost : 'localhost',
+                'dbname' => isset($dbname) ? (string) $dbname : '',
+                'dbuser' => isset($usernamedb) ? (string) $usernamedb : '',
+                'dbpass' => isset($passworddb) ? (string) $passworddb : '',
+            ];
         };
-        $cnf = "[client]\nhost=\"" . $esc($dbhost) . "\"\nuser=\"" . $esc($dbuser) . "\"\npassword=\"" . $esc($dbpass) . "\"\n";
-        if (file_put_contents($path, $cnf, LOCK_EX) === false) {
+        $vars = $load($root . '/config.php');
+        if (!preg_match('/^[A-Za-z0-9_]{1,64}$/', $vars['dbname']) || !preg_match('/^[A-Za-z0-9_]{1,64}$/', $vars['dbuser'])) {
             exit(1);
         }
+        if (str_contains($vars['dbpass'], "\n") || str_contains($vars['dbpass'], "\0")) {
+            exit(1);
+        }
+        $esc = static fn (string $v): string => str_replace(['\\', '"'], ['\\\\', '\\"'], $v);
+        $cnf = "[client]\nhost=\"" . $esc($vars['dbhost']) . "\"\nuser=\"" . $esc($vars['dbuser']) . "\"\npassword=\"" . $esc($vars['dbpass']) . "\"\n";
+        file_put_contents($path, $cnf, LOCK_EX);
         @chmod($path, 0600);
-        file_put_contents($realParent . '/dbname.txt', $dbname, LOCK_EX);
+        file_put_contents($realParent . '/dbname.txt', $vars['dbname'], LOCK_EX);
         @chmod($realParent . '/dbname.txt', 0600);
         exit(0);
     }

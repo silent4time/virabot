@@ -336,7 +336,7 @@ include __DIR__ . '/inc/layout_head.php';
         <div class="card-head">
             <div>
                 <div class="card-title">به‌روزرسانی ویرابات</div>
-                <div class="card-subtitle">فقط از سرور مورد اعتماد شما؛ این نصب به گیت‌هاب وصل نمی‌شود</div>
+                <div class="card-subtitle">انتشار پایدار عمومی گیت‌هاب، بدون توکن</div>
             </div>
         </div>
         <div class="card-body" style="display:flex;flex-direction:column;gap:16px">
@@ -346,11 +346,11 @@ include __DIR__ . '/inc/layout_head.php';
                 <text x="101" y="68" fill="#f6f3ea" font-size="14" text-anchor="middle">ربات نصب‌شده</text>
                 <text x="101" y="92" fill="#c8c8c8" font-size="12" text-anchor="middle">بدون توکن گیت‌هاب</text>
                 <rect x="235" y="36" width="170" height="78" rx="10" fill="#1c1a16" stroke="#f0c43a"/>
-                <text x="320" y="68" fill="#f6f3ea" font-size="14" text-anchor="middle">سرور مورد اعتماد</text>
-                <text x="320" y="92" fill="#c8c8c8" font-size="12" text-anchor="middle">فقط همین توکن را دارد</text>
+                <text x="320" y="68" fill="#f6f3ea" font-size="14" text-anchor="middle">انتشار عمومی</text>
+                <text x="320" y="92" fill="#c8c8c8" font-size="12" text-anchor="middle">api.github.com</text>
                 <rect x="454" y="36" width="170" height="78" rx="10" fill="#12110e" stroke="#6e6e6e"/>
-                <text x="539" y="68" fill="#f6f3ea" font-size="14" text-anchor="middle">انتشار گیت‌هاب</text>
-                <text x="539" y="92" fill="#c8c8c8" font-size="12" text-anchor="middle">مخزن خصوصی</text>
+                <text x="539" y="68" fill="#f6f3ea" font-size="14" text-anchor="middle">بسته و SHA-256</text>
+                <text x="539" y="92" fill="#c8c8c8" font-size="12" text-anchor="middle">امضای ناشر نیست</text>
                 <path d="M186 75 H235" stroke="#f0c43a" stroke-width="2"/>
                 <path d="M405 75 H454" stroke="#f0c43a" stroke-width="2"/>
             </svg>
@@ -369,7 +369,7 @@ include __DIR__ . '/inc/layout_head.php';
                     <input type="hidden" name="action" value="queue_update">
                     <button type="submit" class="btn btn-primary" style="width:auto">صف به‌روزرسانی به نسخهٔ <?= htmlspecialchars((string) $vbInfo['remote'], ENT_QUOTES, 'UTF-8') ?></button>
                 </form>
-                <p style="color:var(--mute);font-size:.85rem;margin:0">این دکمه فقط یک درخواست امضاشده در صف می‌نویسد. نصب را کارگر ریشه با <span class="cm">sudo virabot update-worker</span> انجام می‌دهد. پیکربندی، پایگاه داده و پرداخت‌ها بازنویسی نمی‌شوند.</p>
+                <p style="color:var(--mute);font-size:.85rem;margin:0">این دکمه فقط درخواست را در صف می‌نویسد. نصب را کارگر ریشه با <span class="cm">sudo virabot update-worker</span> انجام می‌دهد. پیکربندی، پایگاه داده و پرداخت‌ها بازنویسی نمی‌شوند.</p>
             <?php elseif (!$vbOwner): ?>
                 <p style="margin:0">فقط مدیر اصلی این کار را می‌بیند.</p>
             <?php else: ?>

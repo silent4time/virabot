@@ -1228,10 +1228,11 @@ update_job_action_ok() {
 update_fail_cleanup() {
   local rc=$?
   if [[ -n "${VB_UPDATE_BAK:-}" && -d "${INSTALL_DIR:-}" ]]; then
-    update_rollback_code "$VB_UPDATE_BAK" "$INSTALL_DIR" || true
-  fi
-  if [[ -f "${INSTALL_DIR:-}/update_channel.php" ]]; then
-    php "${INSTALL_DIR}/update_channel.php" mark-job failed >/dev/null 2>&1 || true
+    if update_rollback_code "$VB_UPDATE_BAK" "$INSTALL_DIR"; then
+      php "${INSTALL_DIR}/update_channel.php" mark-job failed-rolled >/dev/null 2>&1 || true
+    elif [[ -f "${INSTALL_DIR:-}/update_channel.php" ]]; then
+      php "${INSTALL_DIR}/update_channel.php" mark-job failed >/dev/null 2>&1 || true
+    fi
   fi
   trap - ERR
   exit "$rc"
@@ -1241,6 +1242,16 @@ update_rollback_code() {
   local bak="$1" dest="$2" rel
   [[ -f "${bak}/code.tar" && -d "$dest" ]] || return 1
   tar -C "$dest" -xf "${bak}/code.tar" || return 1
+  if [[ -f "${bak}/before.list" ]]; then
+    while IFS= read -r rel || [[ -n "${rel:-}" ]]; do
+      case "$rel" in
+        ""|*..*|/*|storage|storage/*) continue ;;
+      esac
+      if ! grep -qxF "$rel" "${bak}/before.list"; then
+        rm -f "${dest}/${rel}"
+      fi
+    done < <(cd "$dest" && find . -type f ! -path './storage/*' ! -path './error_log' | sed 's#^\./##')
+  fi
   if [[ -f "${bak}/newfiles.txt" ]]; then
     while IFS= read -r rel || [[ -n "${rel:-}" ]]; do
       case "$rel" in
@@ -1337,6 +1348,7 @@ do_update() {
     INSTALL_DIR="${2:-}"
     prepared_dir="${3:-}"
     case "$prepared_dir" in
+      /tmp/virabot-upd.*/*) err "Refusing a prepared package with an extra path."; return 1 ;;
       /tmp/virabot-upd.*) ;;
       *) err "Refusing a prepared package outside the worker temp directory."; return 1 ;;
     esac
@@ -1389,6 +1401,9 @@ do_update() {
   backup_database_for_update "$INSTALL_DIR" "$bak" || true
   ok "Backup: $bak"
   VB_UPDATE_BAK="$bak"
+  if [[ -d "$INSTALL_DIR" ]]; then
+    (cd "$INSTALL_DIR" && find . -type f ! -path './storage/*' ! -path './error_log' | sed 's#^\./##' | sort) > "${bak}/before.list" || true
+  fi
   trap update_fail_cleanup ERR
 
   local tmp src_patch="" phpbin=""
@@ -1412,7 +1427,11 @@ do_update() {
     info "Extracting and using as update source..."
     mkdir -p "$tmp/zipout"
     if [[ -n "$phpbin" ]]; then
-      if php "$phpbin" extract-zip "$latest_zip" "$tmp/zipout"; then
+      sumf="${latest_zip}.sha256"
+      [[ -f "$sumf" ]] || sumf="$(dirname "$latest_zip")/virabot-update.zip.sha256"
+      if [[ ! -f "$sumf" ]]; then
+        warn "Checksum file is missing; local zip was not used."
+      elif php "$phpbin" extract-zip "$latest_zip" "$tmp/zipout" "$sumf"; then
         if [[ -d "$tmp/zipout/tree/patch" ]]; then
           src_patch="$tmp/zipout/tree/patch"
           [[ -f "$tmp/zipout/tree/VERSION" ]] && cp -f "$tmp/zipout/tree/VERSION" "$tmp/VERSION" || true
@@ -1442,13 +1461,13 @@ do_update() {
 
   # اولویت ۲: سرور به‌روزرسانی مورد اعتماد. این مسیر به گیت‌هاب وصل نمی‌شود.
   if [[ "$prepared_mode" -eq 0 && -z "$src_patch" && -f "${INSTALL_DIR}/update_channel.php" && -f "${INSTALL_DIR}/config.php" ]]; then
-    info "Fetching the package from the configured update server..."
+    info "Fetching the public GitHub release (no token)..."
     mkdir -p "$tmp/channel"
     if php "${INSTALL_DIR}/update_channel.php" fetch-into "$tmp/channel"; then
       if [[ -d "$tmp/channel/tree/patch" ]]; then
         src_patch="$tmp/channel/tree/patch"
         [[ -f "$tmp/channel/tree/VERSION" ]] && cp -f "$tmp/channel/tree/VERSION" "$tmp/VERSION" || true
-        ok "Package received from the update server."
+        ok "Package received from the public GitHub release."
       fi
     else
       warn "Update server is disabled, unreachable, or rejected the package."
@@ -1457,8 +1476,7 @@ do_update() {
 
   if [[ -z "$src_patch" || ! -d "$src_patch" ]]; then
     err "patch/ folder not found in update source."
-    err "Put a verified zip in ${ZIP_DROP_DIR}/ or configure the update server in config.php."
-    err "This installer does not download the private repository from GitHub."
+    err "Put virabot-update.zip and virabot-update.zip.sha256 in ${ZIP_DROP_DIR}/ or let the public release download succeed."
     if [[ "$prepared_mode" -eq 1 && -f "${INSTALL_DIR}/update_channel.php" ]]; then
       php "${INSTALL_DIR}/update_channel.php" mark-job failed || true
     fi

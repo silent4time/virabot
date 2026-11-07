@@ -79,7 +79,3 @@ $LICENSE_API_URL = '{{LICENSE_API_URL}}'; // empty = built-in (obfuscated) endpo
 // تأیید گواهی SSL سرور لایسنس روشن است. فقط اگر سرور شما گواهی را تأیید نمی‌کند و خطای SSL در error_log دیدید، true کنید.
 $LICENSE_ALLOW_INSECURE_SSL = false;
 
-// کانال به‌روزرسانی. خالی یعنی خاموش. توکن گیت‌هاب را اینجا نگذارید.
-$UPDATE_SERVER_URL = '';
-$UPDATE_CLIENT_KEY = '';
-

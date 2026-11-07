@@ -1,20 +1,29 @@
 <?php
 /**
- * Virabot update protocol (shared, no secrets).
- * Clients and the trusted update server both load this file.
- * It never contacts GitHub and never accepts a GitHub token.
+ * Virabot public-release update helpers.
+ * No GitHub token and no distributor server.
  */
 declare(strict_types=1);
 
+const VB_UPDATE_REPO = 'silent4time/virabot';
 const VB_UPDATE_ASSET = 'virabot-update.zip';
-const VB_UPDATE_CACHE_OK = 21600;   // 6h
-const VB_UPDATE_CACHE_ERR = 3600;   // 1h
-const VB_UPDATE_DOWNLOAD_TTL = 600; // 10 min
-const VB_UPDATE_NONCE_TTL = 900;    // 15 min
-const VB_UPDATE_JOB_TTL = 86400;    // 24h
-const VB_UPDATE_MAX_ZIP_BYTES = 536870912; // 512 MiB uncompressed
+const VB_UPDATE_SUM = 'virabot-update.zip.sha256';
+const VB_UPDATE_CACHE_OK = 21600;
+const VB_UPDATE_CACHE_ERR = 3600;
+const VB_UPDATE_NONCE_TTL = 900;
+const VB_UPDATE_JOB_TTL = 86400;
+const VB_UPDATE_MAX_ZIP_BYTES = 536870912;
 const VB_UPDATE_MAX_ZIP_FILES = 8000;
 const VB_UPDATE_MAX_ZIP_RATIO = 80;
+
+function vb_update_redirect_hosts(): array
+{
+    return [
+        'release-assets.githubusercontent.com',
+        'objects.githubusercontent.com',
+        'github-releases.githubusercontent.com',
+    ];
+}
 
 function vb_update_semver_parse(string $version): ?array
 {
@@ -53,10 +62,6 @@ function vb_update_cache_fresh(array $cache, int $now): bool
     return ($now - $at) < $ttl;
 }
 
-/**
- * HTTPS URL whose host is exactly one of $hosts.
- * Rejects userinfo, IP literals, non-443 ports, query tricks and non-https schemes.
- */
 function vb_update_url_pinned(string $url, array $hosts): bool
 {
     $parts = parse_url($url);
@@ -70,217 +75,92 @@ function vb_update_url_pinned(string $url, array $hosts): bool
         return false;
     }
     $host = strtolower((string) ($parts['host'] ?? ''));
-    if ($host === '' || !in_array($host, $hosts, true)) {
+    if ($host === '' || !in_array($host, $hosts, true) || filter_var($host, FILTER_VALIDATE_IP)) {
         return false;
     }
     if (isset($parts['port']) && (int) $parts['port'] !== 443) {
         return false;
     }
-    if (filter_var($host, FILTER_VALIDATE_IP)) {
-        return false;
-    }
     return true;
-}
-
-function vb_update_client_base_ok(string $url): bool
-{
-    $url = trim($url);
-    if ($url === '' || str_contains($url, '{{') || str_contains(strtolower($url), 'example.com')) {
-        return false;
-    }
-    $parts = parse_url($url);
-    if (!is_array($parts)) {
-        return false;
-    }
-    if (strtolower((string) ($parts['scheme'] ?? '')) !== 'https') {
-        return false;
-    }
-    if (isset($parts['user']) || isset($parts['pass']) || isset($parts['query']) || isset($parts['fragment'])) {
-        return false;
-    }
-    $host = strtolower((string) ($parts['host'] ?? ''));
-    if ($host === '' || filter_var($host, FILTER_VALIDATE_IP)) {
-        return false;
-    }
-    if (isset($parts['port']) && (int) $parts['port'] !== 443) {
-        return false;
-    }
-    $path = (string) ($parts['path'] ?? '');
-    if ($path !== '' && $path !== '/') {
-        return false;
-    }
-    return true;
-}
-
-function vb_update_join_pinned(string $base, string $path, array $query): ?string
-{
-    if (!vb_update_client_base_ok($base)) {
-        return null;
-    }
-    if ($path !== '/v1/release' && $path !== '/v1/download' && $path !== '/v1/health') {
-        return null;
-    }
-    $parts = parse_url(trim($base));
-    $origin = 'https://' . strtolower((string) $parts['host']);
-    $qs = [];
-    foreach ($query as $k => $v) {
-        $k = (string) $k;
-        $v = (string) $v;
-        if (!preg_match('/^[a-z]{1,12}$/', $k)) {
-            return null;
-        }
-        if ($k === 'ver') {
-            if (vb_update_semver_parse($v) === null) {
-                return null;
-            }
-        } elseif (!preg_match('/^[A-Za-z0-9]{1,128}$/', $v)) {
-            return null;
-        }
-        $qs[$k] = $v;
-    }
-    $url = $origin . $path;
-    if ($qs !== []) {
-        $url .= '?' . http_build_query($qs);
-    }
-    $host = strtolower((string) $parts['host']);
-    if (!vb_update_url_pinned($url, [$host])) {
-        return null;
-    }
-    return $url;
-}
-
-function vb_update_repo_slug(string $repo): ?array
-{
-    if (!preg_match('#^([A-Za-z0-9_.-]{1,80})/([A-Za-z0-9_.-]{1,80})$#', trim($repo), $m)) {
-        return null;
-    }
-    return [$m[1], $m[2]];
-}
-
-function vb_update_client_key_ok(string $key): bool
-{
-    return (bool) preg_match('/^[A-Za-z0-9_-]{32,128}$/', $key);
-}
-
-function vb_update_key_fingerprint(string $key): string
-{
-    return hash('sha256', $key);
 }
 
 /**
- * @param array<string,string> $hashes id => sha256 hex
- * @return array{ok:bool,id:string}
+ * Checksum asset is an unsigned SHA-256 of the zip, not a publisher signature.
+ * Accepts a single line: 64 hex, or `sha256sum` form `HEX[ *]virabot-update.zip`.
  */
-function vb_update_match_key(string $key, array $hashes): array
+function vb_update_parse_checksum(string $body): ?string
 {
-    $dummy = hash('sha256', 'vb-update-dummy-key');
-    $fp = vb_update_client_key_ok($key) ? vb_update_key_fingerprint($key) : $dummy;
-    $found = '';
-    $checked = false;
-    foreach ($hashes as $id => $hash) {
-        $id = (string) $id;
-        $hash = strtolower(trim((string) $hash));
-        if (!preg_match('/^[A-Za-z0-9_-]{1,32}$/', $id) || !preg_match('/^[a-f0-9]{64}$/', $hash)) {
+    $body = str_replace("\r\n", "\n", $body);
+    $lines = array_values(array_filter(explode("\n", $body), static fn ($l) => trim($l) !== ''));
+    if (count($lines) !== 1) {
+        return null;
+    }
+    $line = trim($lines[0]);
+    if (!preg_match('/^([a-fA-F0-9]{64})(?:[ \t]+\*?virabot-update\.zip)?$/', $line, $m)) {
+        return null;
+    }
+    return strtolower($m[1]);
+}
+
+/**
+ * @param array<int,mixed> $releases
+ * @return array{ok:bool,error:string,version:string,zip_id:int,sum_id:int}
+ */
+function vb_update_pick_release(array $releases): array
+{
+    $empty = ['ok' => false, 'error' => 'no_stable_release', 'version' => '', 'zip_id' => 0, 'sum_id' => 0];
+    $best = null;
+    $bestVer = '';
+    foreach ($releases as $rel) {
+        if (!is_array($rel) || !empty($rel['draft']) || !empty($rel['prerelease'])) {
             continue;
         }
-        $checked = true;
-        if (hash_equals($hash, $fp)) {
-            $found = $id;
+        $parsed = vb_update_semver_parse(trim((string) ($rel['tag_name'] ?? '')));
+        if ($parsed === null) {
+            continue;
+        }
+        $ver = $parsed[0] . '.' . $parsed[1] . '.' . $parsed[2];
+        if ($best !== null && vb_update_semver_cmp($ver, $bestVer) <= 0) {
+            continue;
+        }
+        $best = $rel;
+        $bestVer = $ver;
+    }
+    if ($best === null) {
+        return $empty;
+    }
+    $zipId = 0;
+    $sumId = 0;
+    foreach (($best['assets'] ?? []) as $asset) {
+        if (!is_array($asset)) {
+            continue;
+        }
+        $id = (int) ($asset['id'] ?? 0);
+        $name = (string) ($asset['name'] ?? '');
+        if ($id <= 0) {
+            continue;
+        }
+        if ($name === VB_UPDATE_ASSET) {
+            $zipId = $id;
+        } elseif ($name === VB_UPDATE_SUM) {
+            $sumId = $id;
         }
     }
-    if (!$checked) {
-        hash_equals($dummy, $fp);
+    if ($zipId === 0 || $sumId === 0) {
+        $empty['error'] = 'checksum_unavailable';
+        $empty['version'] = $bestVer;
+        return $empty;
     }
-    return ['ok' => $found !== '', 'id' => $found];
+    return ['ok' => true, 'error' => '', 'version' => $bestVer, 'zip_id' => $zipId, 'sum_id' => $sumId];
 }
 
-function vb_update_sign(string $secret, string $payload): string
+function vb_update_asset_api_url(int $id): ?string
 {
-    return hash_hmac('sha256', $payload, $secret);
-}
-
-function vb_update_ticket_payload(string $keyId, string $version, string $sha256, int $exp, string $nonce): string
-{
-    return $keyId . '|' . $version . '|' . strtolower($sha256) . '|' . $exp . '|' . $nonce;
-}
-
-function vb_update_public_meta(array $meta): array
-{
-    $keep = ['ok', 'error', 'version', 'sha256', 'size', 'asset', 'published_at', 'stale', 'download'];
-    $out = [];
-    foreach ($keep as $k) {
-        if (array_key_exists($k, $meta)) {
-            $out[$k] = $meta[$k];
-        }
+    if ($id <= 0) {
+        return null;
     }
-    if (isset($out['download']) && is_array($out['download'])) {
-        $dl = $out['download'];
-        $out['download'] = [
-            'path' => '/v1/download',
-            'exp' => (int) ($dl['exp'] ?? 0),
-            'nonce' => (string) ($dl['nonce'] ?? ''),
-            'ver' => (string) ($dl['ver'] ?? ''),
-            'sig' => (string) ($dl['sig'] ?? ''),
-        ];
-    }
-    return $out;
-}
-
-function vb_update_text_has_secret(string $text, array $secrets): bool
-{
-    foreach ($secrets as $secret) {
-        $secret = (string) $secret;
-        if ($secret !== '' && strlen($secret) >= 8 && str_contains($text, $secret)) {
-            return true;
-        }
-    }
-    if (preg_match('/ghp_|github_pat_|Bearer\s+[A-Za-z0-9_\-]{20,}/', $text)) {
-        return true;
-    }
-    return false;
-}
-
-/**
- * @return array{allowed:bool,retry_after:int}
- */
-function vb_update_rate_allow(string $file, int $now, int $window, int $max): array
-{
-    $dir = dirname($file);
-    if (!is_dir($dir) && !@mkdir($dir, 0700, true) && !is_dir($dir)) {
-        return ['allowed' => false, 'retry_after' => $window];
-    }
-    $fh = fopen($file, 'c+');
-    if ($fh === false) {
-        return ['allowed' => false, 'retry_after' => $window];
-    }
-    try {
-        if (!flock($fh, LOCK_EX)) {
-            return ['allowed' => false, 'retry_after' => $window];
-        }
-        rewind($fh);
-        $raw = stream_get_contents($fh);
-        $hits = json_decode($raw === false || $raw === '' ? '[]' : $raw, true);
-        if (!is_array($hits)) {
-            $hits = [];
-        }
-        $hits = array_values(array_filter($hits, static function ($t) use ($now, $window) {
-            return is_int($t) || ctype_digit((string) $t) ? ($now - (int) $t) < $window : false;
-        }));
-        $hits = array_map('intval', $hits);
-        if (count($hits) >= $max) {
-            $oldest = min($hits);
-            return ['allowed' => false, 'retry_after' => max(1, $window - ($now - $oldest))];
-        }
-        $hits[] = $now;
-        rewind($fh);
-        ftruncate($fh, 0);
-        fwrite($fh, json_encode($hits));
-        fflush($fh);
-        return ['allowed' => true, 'retry_after' => 0];
-    } finally {
-        flock($fh, LOCK_UN);
-        fclose($fh);
-    }
+    $url = 'https://api.github.com/repos/' . VB_UPDATE_REPO . '/releases/assets/' . $id;
+    return vb_update_url_pinned($url, ['api.github.com']) ? $url : null;
 }
 
 function vb_update_zip_entry_error(string $name): ?string
@@ -289,17 +169,15 @@ function vb_update_zip_entry_error(string $name): ?string
         return 'empty_name';
     }
     $name = str_replace('\\', '/', $name);
-    if (str_starts_with($name, '/') || str_starts_with($name, '//') || preg_match('#^[A-Za-z]:/#', $name)) {
+    if (str_starts_with($name, '/') || preg_match('#^[A-Za-z]:/#', $name)) {
         return 'absolute';
     }
     if ($name === '..' || str_contains($name, '../') || str_contains($name, '/..')) {
         return 'traversal';
     }
     foreach (explode('/', $name) as $part) {
-        if ($part === '..' || $part === '') {
-            if ($part === '..') {
-                return 'traversal';
-            }
+        if ($part === '..') {
+            return 'traversal';
         }
     }
     return null;
@@ -314,11 +192,39 @@ function vb_update_zip_is_symlink(int $opsys, int $attr): bool
     return ($mode & 0170000) === 0120000;
 }
 
-/**
- * Extract a zip into $dest or reject it. On failure the destination is removed.
- *
- * @return array{ok:bool,error:string}
- */
+function vb_update_rrmdir(string $dir): void
+{
+    if (!is_dir($dir)) {
+        return;
+    }
+    $items = scandir($dir);
+    if ($items === false) {
+        return;
+    }
+    foreach ($items as $item) {
+        if ($item === '.' || $item === '..') {
+            continue;
+        }
+        $path = $dir . '/' . $item;
+        if (is_link($path) || is_file($path)) {
+            @unlink($path);
+        } elseif (is_dir($path)) {
+            vb_update_rrmdir($path);
+        }
+    }
+    @rmdir($dir);
+}
+
+function vb_update_sanitize_package(string $root): void
+{
+    foreach (['config.php', '.env', 'github_token.php'] as $rel) {
+        if (is_file($root . '/' . $rel)) {
+            @unlink($root . '/' . $rel);
+        }
+    }
+}
+
+/** @return array{ok:bool,error:string} */
 function vb_update_extract_zip(string $zipPath, string $dest, array $limits = []): array
 {
     $maxBytes = (int) ($limits['max_bytes'] ?? VB_UPDATE_MAX_ZIP_BYTES);
@@ -374,11 +280,6 @@ function vb_update_extract_zip(string $zipPath, string $dest, array $limits = []
         }
         $count++;
         $size = (int) ($stat['size'] ?? 0);
-        if ($size < 0) {
-            $za->close();
-            vb_update_rrmdir($destReal);
-            return ['ok' => false, 'error' => 'size'];
-        }
         $total += $size;
         if ($count > $maxFiles || $total > $maxBytes || ($total > 1048576 && ($total / $comp) > $maxRatio)) {
             $za->close();
@@ -415,14 +316,9 @@ function vb_update_extract_zip(string $zipPath, string $dest, array $limits = []
             vb_update_rrmdir($destReal);
             return ['ok' => false, 'error' => 'write'];
         }
-        $written = stream_copy_to_stream($in, $out);
+        stream_copy_to_stream($in, $out);
         fclose($in);
         fclose($out);
-        if ($written === false) {
-            $za->close();
-            vb_update_rrmdir($destReal);
-            return ['ok' => false, 'error' => 'write'];
-        }
         $fileReal = realpath($target);
         if ($fileReal === false || !str_starts_with($fileReal, $prefix)) {
             $za->close();
@@ -435,91 +331,41 @@ function vb_update_extract_zip(string $zipPath, string $dest, array $limits = []
     return ['ok' => true, 'error' => ''];
 }
 
-function vb_update_rrmdir(string $dir): void
-{
-    if (!is_dir($dir)) {
-        return;
-    }
-    $items = scandir($dir);
-    if ($items === false) {
-        return;
-    }
-    foreach ($items as $item) {
-        if ($item === '.' || $item === '..') {
-            continue;
-        }
-        $path = $dir . '/' . $item;
-        if (is_link($path) || is_file($path)) {
-            @unlink($path);
-        } elseif (is_dir($path)) {
-            vb_update_rrmdir($path);
-        }
-    }
-    @rmdir($dir);
-}
-
-/** Drop distributor secrets if a full git tree was packed by mistake. */
-function vb_update_sanitize_package(string $root): void
-{
-    vb_update_rrmdir($root . '/update-server');
-    foreach (['.env', 'github_token.php', 'update-server/config.php'] as $rel) {
-        $path = $root . '/' . $rel;
-        if (is_file($path)) {
-            @unlink($path);
-        }
-    }
-}
-
-/**
- * @return array{ok:bool,error:string}
- */
+/** @return array{ok:bool,error:string} */
 function vb_update_package_ok(string $root): array
 {
     vb_update_sanitize_package($root);
-    $versionFile = $root . '/VERSION';
-    $manage = $root . '/manage.sh';
-    $bot = $root . '/patch/botapi.php';
-    if (!is_file($versionFile) || !is_file($manage) || !is_file($bot)) {
+    if (!is_file($root . '/VERSION') || !is_file($root . '/manage.sh') || !is_file($root . '/patch/botapi.php')) {
         return ['ok' => false, 'error' => 'incomplete'];
     }
-    $ver = trim((string) file_get_contents($versionFile));
-    if (vb_update_semver_parse($ver) === null) {
+    if (vb_update_semver_parse(trim((string) file_get_contents($root . '/VERSION'))) === null) {
         return ['ok' => false, 'error' => 'version'];
     }
-    $ms = (string) file_get_contents($manage);
-    if (!str_contains($ms, 'PROJECT_NAME="virabot"')) {
+    if (!str_contains((string) file_get_contents($root . '/manage.sh'), 'PROJECT_NAME="virabot"')) {
         return ['ok' => false, 'error' => 'not_virabot'];
     }
-    if (is_file($root . '/update-server/config.php')) {
+    if (is_file($root . '/config.php')) {
         return ['ok' => false, 'error' => 'secret_packed'];
     }
     return ['ok' => true, 'error' => ''];
 }
 
-/**
- * @return array{ok:bool,error:string}
- */
+/** @return array{ok:bool,error:string} */
 function vb_update_queue_validate(array $job, int $now): array
 {
-    if (($job['v'] ?? null) !== 1) {
-        return ['ok' => false, 'error' => 'schema'];
-    }
-    if (($job['action'] ?? '') !== 'apply_release') {
+    if (($job['v'] ?? null) !== 1 || ($job['action'] ?? '') !== 'apply_release') {
         return ['ok' => false, 'error' => 'action'];
     }
-    $id = (string) ($job['id'] ?? '');
-    if (!preg_match('/^[a-f0-9]{32}$/', $id)) {
+    if (!preg_match('/^[a-f0-9]{32}$/', (string) ($job['id'] ?? ''))) {
         return ['ok' => false, 'error' => 'id'];
     }
     if (vb_update_semver_parse((string) ($job['version'] ?? '')) === null) {
         return ['ok' => false, 'error' => 'version'];
     }
-    $admin = (string) ($job['admin_id'] ?? '');
-    if (!preg_match('/^-?[0-9]{1,20}$/', $admin)) {
+    if (!preg_match('/^-?[0-9]{1,20}$/', (string) ($job['admin_id'] ?? ''))) {
         return ['ok' => false, 'error' => 'admin'];
     }
-    $exp = (int) ($job['expires'] ?? 0);
-    if ($exp < $now) {
+    if ((int) ($job['expires'] ?? 0) < $now) {
         return ['ok' => false, 'error' => 'expired'];
     }
     foreach (['cmd', 'command', 'shell', 'url', 'token'] as $banned) {
@@ -530,11 +376,7 @@ function vb_update_queue_validate(array $job, int $now): array
     return ['ok' => true, 'error' => ''];
 }
 
-/**
- * @param array{from_id?:string,rule?:string,in_admin_ids?:bool} $admin
- * @param array{admin?:string,version?:string,exp?:int,used?:bool} $nonce
- * @return array{ok:bool,error:string}
- */
+/** @return array{ok:bool,error:string} */
 function vb_update_action_allowed(array $admin, array $nonce, int $now): array
 {
     $from = (string) ($admin['from_id'] ?? '');
@@ -556,13 +398,13 @@ function vb_update_action_allowed(array $admin, array $nonce, int $now): array
     return ['ok' => true, 'error' => ''];
 }
 
-/**
- * Copy a whitelist of files with backup and rollback.
- * $failAfter aborts after that many successful copies (tests).
- *
- * @param list<string> $files
- * @return array{ok:bool,error:string,rolled_back:bool}
- */
+function vb_update_preserve_ok(string $rel): bool
+{
+    return !in_array($rel, ['config.php', 'config.template.php', 'api/hash.txt'], true)
+        && !str_starts_with($rel, 'storage/');
+}
+
+/** @param list<string> $files @return array{ok:bool,error:string,rolled_back:bool} */
 function vb_update_apply_files(string $src, string $dst, string $backup, array $files, ?int $failAfter = null): array
 {
     if (!is_dir($backup) && !@mkdir($backup, 0700, true)) {
@@ -572,7 +414,7 @@ function vb_update_apply_files(string $src, string $dst, string $backup, array $
     $created = [];
     $n = 0;
     foreach ($files as $rel) {
-        $rel = str_replace('\\', '/', (string) $rel);
+        $rel = str_replace('\\', '/', $rel);
         if (vb_update_zip_entry_error($rel) !== null || !vb_update_preserve_ok($rel)) {
             vb_update_restore_files($dst, $backup, $done, $created);
             return ['ok' => false, 'error' => 'path', 'rolled_back' => true];
@@ -583,18 +425,12 @@ function vb_update_apply_files(string $src, string $dst, string $backup, array $
             vb_update_restore_files($dst, $backup, $done, $created);
             return ['ok' => false, 'error' => 'missing', 'rolled_back' => true];
         }
-        $parent = dirname($to);
-        if (!is_dir($parent) && !@mkdir($parent, 0750, true)) {
-            vb_update_restore_files($dst, $backup, $done, $created);
-            return ['ok' => false, 'error' => 'mkdir', 'rolled_back' => true];
+        if (!is_dir(dirname($to))) {
+            @mkdir(dirname($to), 0750, true);
         }
         if (is_file($to)) {
-            $snap = $backup . '/' . $rel;
-            $snapParent = dirname($snap);
-            if (!is_dir($snapParent)) {
-                @mkdir($snapParent, 0700, true);
-            }
-            if (!@copy($to, $snap)) {
+            @mkdir(dirname($backup . '/' . $rel), 0700, true);
+            if (!@copy($to, $backup . '/' . $rel)) {
                 vb_update_restore_files($dst, $backup, $done, $created);
                 return ['ok' => false, 'error' => 'snapshot', 'rolled_back' => true];
             }
@@ -615,37 +451,21 @@ function vb_update_apply_files(string $src, string $dst, string $backup, array $
     return ['ok' => true, 'error' => '', 'rolled_back' => false];
 }
 
-function vb_update_preserve_ok(string $rel): bool
-{
-    if ($rel === 'config.php' || $rel === 'config.template.php' || $rel === 'api/hash.txt') {
-        return false;
-    }
-    if ($rel === 'storage' || str_starts_with($rel, 'storage/') || str_starts_with($rel, 'update-server/')) {
-        return false;
-    }
-    return true;
-}
-
 function vb_update_restore_files(string $dst, string $backup, array $done, array $created): void
 {
     foreach ($done as $rel) {
-        $snap = $backup . '/' . $rel;
-        $to = $dst . '/' . $rel;
-        if (is_file($snap)) {
-            @copy($snap, $to);
+        if (is_file($backup . '/' . $rel)) {
+            @copy($backup . '/' . $rel, $dst . '/' . $rel);
         }
     }
     foreach ($created as $rel) {
-        $to = $dst . '/' . $rel;
-        if (is_file($to)) {
-            @unlink($to);
+        if (is_file($dst . '/' . $rel)) {
+            @unlink($dst . '/' . $rel);
         }
     }
 }
 
-/**
- * HTTPS client that does not follow redirects and does not talk to non-HTTPS URLs.
- */
+/** @param array<string,string> $headers @return array{status:int,headers:array<string,string>,body:string,error:string} */
 function vb_update_http_request(string $method, string $url, array $headers, int $timeoutSeconds, array $allowedHosts): array
 {
     $fail = ['status' => 0, 'headers' => [], 'body' => '', 'error' => 'transport'];
@@ -653,24 +473,26 @@ function vb_update_http_request(string $method, string $url, array $headers, int
         $fail['error'] = 'unpinned';
         return $fail;
     }
+    if (isset($headers['Authorization']) || isset($headers['authorization'])) {
+        $fail['error'] = 'auth_forbidden';
+        return $fail;
+    }
     if (!function_exists('curl_init')) {
         $fail['error'] = 'curl';
         return $fail;
+    }
+    $hdrs = [];
+    foreach ($headers as $k => $v) {
+        if (preg_match("/[\r\n]/", (string) $k . (string) $v)) {
+            return $fail;
+        }
+        $hdrs[] = $k . ': ' . $v;
     }
     $ch = curl_init($url);
     if ($ch === false) {
         return $fail;
     }
-    $hdrs = [];
-    foreach ($headers as $k => $v) {
-        $k = (string) $k;
-        $v = (string) $v;
-        if (str_contains($k, "\r") || str_contains($k, "\n") || str_contains($v, "\r") || str_contains($v, "\n")) {
-            return $fail;
-        }
-        $hdrs[] = $k . ': ' . $v;
-    }
-    $opts = [
+    curl_setopt_array($ch, [
         CURLOPT_CUSTOMREQUEST => $method,
         CURLOPT_HTTPHEADER => $hdrs,
         CURLOPT_RETURNTRANSFER => true,
@@ -680,26 +502,23 @@ function vb_update_http_request(string $method, string $url, array $headers, int
         CURLOPT_TIMEOUT => $timeoutSeconds,
         CURLOPT_PROTOCOLS => CURLPROTO_HTTPS,
         CURLOPT_REDIR_PROTOCOLS => 0,
-    ];
-    curl_setopt_array($ch, $opts);
+    ]);
     $raw = curl_exec($ch);
     if ($raw === false) {
-        $fail['error'] = 'timeout';
         curl_close($ch);
+        $fail['error'] = 'timeout';
         return $fail;
     }
     $status = (int) curl_getinfo($ch, CURLINFO_RESPONSE_CODE);
     $headerSize = (int) curl_getinfo($ch, CURLINFO_HEADER_SIZE);
     curl_close($ch);
-    $headerText = substr($raw, 0, $headerSize);
-    $body = substr($raw, $headerSize);
     $parsed = [];
-    foreach (preg_split("/\r\n|\n|\r/", $headerText) as $line) {
+    foreach (preg_split("/\r\n|\n|\r/", substr($raw, 0, $headerSize)) as $line) {
         $pos = strpos($line, ':');
         if ($pos === false) {
             continue;
         }
         $parsed[strtolower(trim(substr($line, 0, $pos)))] = trim(substr($line, $pos + 1));
     }
-    return ['status' => $status, 'headers' => $parsed, 'body' => $body, 'error' => ''];
+    return ['status' => $status, 'headers' => $parsed, 'body' => substr($raw, $headerSize), 'error' => ''];
 }
