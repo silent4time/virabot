@@ -229,11 +229,19 @@ curl -fsSL https://raw.githubusercontent.com/silent4time/virabot/main/install.sh
 
 ## 🔄 آپدیت
 
+از نسخهٔ ۵٫۸٫۰ به‌روزرسانیِ نصب‌شده دیگر مستقیم از گیت‌هاب گرفته نمی‌شود. سرور جدا روی میزبان مورد اعتماد شما انتشار پایدار را می‌خواند و ربات فقط با کلید خودش از همان سرور بسته را می‌گیرد. تا وقتی نشانی و کلید در `config.php` خالی باشد این کانال خاموش است. جزئیات و تصویر مسیر در [docs/UPDATE_SYSTEM.md](docs/UPDATE_SYSTEM.md) است.
+
+نصب دستی با بستهٔ محلی:
+
 ```bash
-sudo virabot update
+sudo bash install.sh /root/virabot-update.zip update
 ```
 
-یا از منو گزینه **2) Update**. قبل از آپدیت از فایل‌های اصلی بکاپ گرفته می‌شود.
+یا بعد از پیکربندی کانال، از منوی مدیر ربات یا تب به‌روزرسانی پنل وب درخواست را در صف بگذارید و بعد:
+
+```bash
+sudo virabot update-worker
+```
 
 ## 📋 منوی مدیریت
 
@@ -497,11 +505,12 @@ Choose **1) Install**. The script asks for the domain, Telegram token, Bale toke
 
 ## 🔄 Update
 
-```bash
-sudo virabot update
-```
+From 5.8.0 an installed bot does not download updates from GitHub. A separate server on a host you control reads the stable release; the bot only uses its own client key. Leave the URL and key empty and the channel stays off. See [docs/UPDATE_SYSTEM.md](docs/UPDATE_SYSTEM.md).
 
-Or choose **2) Update**. Core files are backed up first.
+```bash
+sudo bash install.sh /root/virabot-update.zip update
+sudo virabot update-worker
+```
 
 ## 📋 Management menu
 

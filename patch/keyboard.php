@@ -191,6 +191,7 @@ if ($adminrulecheck['rule'] == "administrator") {
             [['text' => $textbotlang['keyboard']['botReport']], ['text' => $textbotlang['keyboard']['panelFeatures']]],
             [['text' => $textbotlang['keyboard']['generalSettings']], ['text' => $textbotlang['keyboard']['pendingReceipts']]],
             [['text' => '🔑 کد ویرابات']],
+            [['text' => '🔄 به‌روزرسانی ویرابات']],
             [['text' => $textbotlang['bottext']['open_button']]],
             [['text' => $textbotlang['users']['backbtn']]]
         ],

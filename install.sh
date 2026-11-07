@@ -68,15 +68,12 @@ if [[ "${SKIP_LOCAL:-0}" != "1" ]] && LOCAL_FOUND="$(pick_local_zip)"; then
   cp -f "$LOCAL_FOUND" "$ZIP_FILE"
 else
   echo "[*] Downloading Virabot from GitHub (${REPO_OWNER}/${REPO_NAME})..."
-  OK=0
   if [[ -n "${GITHUB_TOKEN:-${GH_TOKEN:-}}" ]]; then
-    TOK="${GITHUB_TOKEN:-$GH_TOKEN}"
-    if curl -fsSL --connect-timeout 15 --max-time 180 \
-      -H "Authorization: token ${TOK}" \
-      -o "$ZIP_FILE" "$REPO_ZIP_GITHUB"; then
-      OK=1
-    fi
+    echo "[!] A GitHub token was set in the environment and was ignored."
+    echo "    Client installers must not send repository credentials."
+    echo "    Download the zip on the trusted update host and run: sudo bash install.sh /root/virabot-update.zip"
   fi
+  OK=0
   # Preferred: source archive of the branch (always matches the latest commit,
   # does not depend on the committed virabot-latest.zip being rebuilt).
   if [[ "$OK" -ne 1 && "${SKIP_CODELOAD:-0}" != "1" ]]; then

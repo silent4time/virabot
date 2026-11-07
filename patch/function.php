@@ -3346,3 +3346,7 @@ if (!function_exists('vb_sync_create_user')) {
         }
     }
 }
+
+if (is_file(__DIR__ . '/update_channel.php')) {
+    require_once __DIR__ . '/update_channel.php';
+}

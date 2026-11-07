@@ -845,7 +845,7 @@ apply_patch_files() {
     fi
   fi
 
-  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php panel_sync.php sync_api.php panels.php; do
+  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php panel_sync.php sync_api.php panels.php update_protocol.php update_channel.php; do
     if [[ -f "${src_patch}/${f}" ]]; then
       cp -f "${src_patch}/${f}" "${target}/${f}"
     else
@@ -1197,7 +1197,7 @@ sync_script_source() {
   if ! cp -a "$pkg"/. "$stage/"; then
     rm -rf "$stage"; warn "Script source not refreshed (copy failed)."; return 0
   fi
-  rm -rf "$stage/.git"
+  rm -rf "$stage/.git" "$stage/update-server"
   chmod 755 "$stage"
   chmod +x "$stage/manage.sh" "$stage/install.sh" 2>/dev/null || true
   old="${parent}/.${PROJECT_NAME}-src.old.$$"
@@ -1216,8 +1216,138 @@ sync_script_source() {
   ok "Management script updated: v$(version_of "$src") ($src)"
 }
 
+# Reject any queued action other than the fixed apply_release verb.
+# The value is never passed to a shell.
+update_job_action_ok() {
+  local f="$1" action=""
+  [[ -f "$f" ]] || return 1
+  action="$(sed -n 's/.*"action"[[:space:]]*:[[:space:]]*"\([^"]*\)".*/\1/p' "$f" | head -1)"
+  [[ "$action" == "apply_release" ]]
+}
+
+update_fail_cleanup() {
+  local rc=$?
+  if [[ -n "${VB_UPDATE_BAK:-}" && -d "${INSTALL_DIR:-}" ]]; then
+    update_rollback_code "$VB_UPDATE_BAK" "$INSTALL_DIR" || true
+  fi
+  if [[ -f "${INSTALL_DIR:-}/update_channel.php" ]]; then
+    php "${INSTALL_DIR}/update_channel.php" mark-job failed >/dev/null 2>&1 || true
+  fi
+  trap - ERR
+  exit "$rc"
+}
+
+update_rollback_code() {
+  local bak="$1" dest="$2" rel
+  [[ -f "${bak}/code.tar" && -d "$dest" ]] || return 1
+  tar -C "$dest" -xf "${bak}/code.tar" || return 1
+  if [[ -f "${bak}/newfiles.txt" ]]; then
+    while IFS= read -r rel || [[ -n "${rel:-}" ]]; do
+      case "$rel" in
+        ""|config.php|storage|storage/*|*..*|/*) continue ;;
+      esac
+      rm -f "${dest}/${rel}"
+    done < "${bak}/newfiles.txt"
+  fi
+}
+
+load_install_env_for_dir() {
+  local want="$1" f d
+  shopt -s nullglob
+  for f in "${INSTANCES_DIR}"/*.env "${STATE_DIR}/install.env"; do
+    [[ -f "$f" ]] || continue
+    d="$(grep -E '^INSTALL_DIR=' "$f" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+    if [[ "$d" == "$want" ]]; then
+      # shellcheck disable=SC1090
+      source "$f"
+      STATE_FILE="$f"
+      VB_STATE_LOADED=1
+      return 0
+    fi
+  done
+  return 1
+}
+
+channel_php() {
+  local install="$1"
+  if [[ -f "${install}/update_channel.php" ]]; then
+    echo "${install}/update_channel.php"
+    return 0
+  fi
+  if [[ -n "${SCRIPT_DIR:-}" && -f "${SCRIPT_DIR}/patch/update_channel.php" ]]; then
+    echo "${SCRIPT_DIR}/patch/update_channel.php"
+    return 0
+  fi
+  return 1
+}
+
+backup_database_for_update() {
+  local install="$1" bak="$2" phpbin cnf dbname
+  [[ -f "${install}/update_channel.php" && -f "${install}/config.php" ]] || return 0
+  cnf="${bak}/client.cnf"
+  if ! php "${install}/update_channel.php" write-db-cnf "$cnf" >/dev/null 2>&1; then
+    warn "Database dump skipped."
+    rm -f "$cnf"
+    return 0
+  fi
+  chmod 600 "$cnf" 2>/dev/null || true
+  dbname="$(tr -d '[:space:]' < "${bak}/dbname.txt" 2>/dev/null || true)"
+  if [[ "$dbname" =~ ^[A-Za-z0-9_]+$ ]] && command -v mysqldump >/dev/null 2>&1; then
+    mysqldump --defaults-extra-file="$cnf" --single-transaction --quick --no-tablespaces "$dbname" 2>"${bak}/dump.err" | gzip > "${bak}/db.sql.gz" \
+      || warn "Database dump failed. Code backup is still in ${bak}."
+    chmod 600 "${bak}/db.sql.gz" "${bak}/dump.err" 2>/dev/null || true
+  fi
+  rm -f "$cnf" "${bak}/dbname.txt"
+}
+
+update_selftest() {
+  local t root bak
+  t="$(mktemp -d)"
+  root="${t}/inst"
+  bak="${t}/bak"
+  mkdir -p "$root" "$bak"
+  printf 'SECRET\n' > "${root}/config.php"
+  printf 'OLD\n' > "${root}/index.php"
+  tar -C "$root" --exclude='./storage' -cf "${bak}/code.tar" .
+  printf 'LEAK\n' > "${root}/config.php"
+  printf 'NEW\n' > "${root}/index.php"
+  printf 'x\n' > "${root}/extra.php"
+  printf 'extra.php\n' > "${bak}/newfiles.txt"
+  update_rollback_code "$bak" "$root" || { rm -rf "$t"; return 1; }
+  grep -qx 'SECRET' "${root}/config.php" || { rm -rf "$t"; return 1; }
+  grep -qx 'OLD' "${root}/index.php" || { rm -rf "$t"; return 1; }
+  [[ ! -f "${root}/extra.php" ]] || { rm -rf "$t"; return 1; }
+  printf '%s\n' '{"action":"touch /tmp/virabot-pwned-a601","cmd":"rm -rf /"}' > "${t}/job.json"
+  if update_job_action_ok "${t}/job.json"; then
+    rm -rf "$t"
+    return 1
+  fi
+  [[ ! -f /tmp/virabot-pwned-a601 ]] || { rm -rf "$t"; return 1; }
+  rm -rf "$t"
+  echo "update-selftest ok"
+  return 0
+}
+
 do_update() {
+  set -e
+  local prepared_mode=0 prepared_dir=""
+  VB_STATE_LOADED=0
+  if [[ "${1:-}" == "--prepared" ]]; then
+    prepared_mode=1
+    INSTALL_DIR="${2:-}"
+    prepared_dir="${3:-}"
+    case "$prepared_dir" in
+      /tmp/virabot-upd.*) ;;
+      *) err "Refusing a prepared package outside the worker temp directory."; return 1 ;;
+    esac
+    if [[ ! -d "$INSTALL_DIR" || ! -f "$prepared_dir/tree/patch/botapi.php" ]]; then
+      err "Prepared update package is incomplete."
+      return 1
+    fi
+    load_install_env_for_dir "$INSTALL_DIR" || warn "Instance env was not loaded; state file will not be rewritten."
+  fi
   echo ""
+  if [[ "$prepared_mode" -eq 0 ]]; then
   if has_legacy; then
     info "Old install found — moving it to Virabot first."
     do_migrate
@@ -1228,14 +1358,19 @@ do_update() {
   fi
   if ! select_instance "update"; then return 1; fi
   apply_instance_identity
+  VB_STATE_LOADED=1
+  fi
   echo -e "${BOLD}=== Update Virabot (latest) ===${NC}"
   echo ""
-  load_state
+  if [[ "$prepared_mode" -eq 0 ]]; then
+    load_state
+  fi
 
   if [[ -z "${INSTALL_DIR:-}" || ! -d "${INSTALL_DIR:-}" ]]; then
     err "No active install found. Run Install first."
     return 1
   fi
+  [[ -n "${INSTANCE_ID:-}" ]] || INSTANCE_ID="$(basename "$INSTALL_DIR")"
 
   local current newv
   current="$(version_of "$INSTALL_DIR")"
@@ -1249,22 +1384,43 @@ do_update() {
   for f in config.php botapi.php function.php index.php admin.php keyboard.php table.php VERSION; do
     [[ -f "${INSTALL_DIR}/${f}" ]] && cp -a "${INSTALL_DIR}/${f}" "${bak}/" || true
   done
+  tar -C "$INSTALL_DIR" --exclude='./storage' --exclude='./error_log' --exclude='./update-server' -cf "${bak}/code.tar" . \
+    || warn "Full code archive failed; file copies above are still kept."
+  backup_database_for_update "$INSTALL_DIR" "$bak" || true
   ok "Backup: $bak"
+  VB_UPDATE_BAK="$bak"
+  trap update_fail_cleanup ERR
 
-  local tmp src_patch=""
+  local tmp src_patch="" phpbin=""
   tmp="$(mktemp -d)"
+  phpbin="$(channel_php "$INSTALL_DIR" || true)"
+
+  if [[ "$prepared_mode" -eq 1 ]]; then
+    src_patch="${prepared_dir}/tree/patch"
+    [[ -f "${prepared_dir}/tree/VERSION" ]] && cp -f "${prepared_dir}/tree/VERSION" "$tmp/VERSION" || true
+  fi
 
   # اولویت ۱: آخرین zip داخل ZIP_DROP_DIR (مثلاً /home/virabot-latest.zip)
+  # بستهٔ محلی فقط وقتی صفِ کارگر در کار نیست. استخراج ناامن رد می‌شود.
   local latest_zip=""
   if [[ -d "${ZIP_DROP_DIR}" ]]; then
     latest_zip="$(ls -1t "${ZIP_DROP_DIR}"/${PROJECT_NAME}*.zip 2>/dev/null | head -1 || true)"
   fi
 
-  if [[ -n "$latest_zip" && -f "$latest_zip" ]]; then
+  if [[ "$prepared_mode" -eq 0 && -n "$latest_zip" && -f "$latest_zip" ]]; then
     info "Found local zip: $latest_zip"
     info "Extracting and using as update source..."
     mkdir -p "$tmp/zipout"
-    if command -v unzip >/dev/null 2>&1; then
+    if [[ -n "$phpbin" ]]; then
+      if php "$phpbin" extract-zip "$latest_zip" "$tmp/zipout"; then
+        if [[ -d "$tmp/zipout/tree/patch" ]]; then
+          src_patch="$tmp/zipout/tree/patch"
+          [[ -f "$tmp/zipout/tree/VERSION" ]] && cp -f "$tmp/zipout/tree/VERSION" "$tmp/VERSION" || true
+        fi
+      else
+        warn "Local zip was rejected."
+      fi
+    elif command -v unzip >/dev/null 2>&1; then
       unzip -qo "$latest_zip" -d "$tmp/zipout"
     else
       apt-get install -y unzip >/dev/null 2>&1 || true
@@ -1284,97 +1440,33 @@ do_update() {
     fi
   fi
 
-  # اولویت ۲: آرشیو سورس همان شاخه از GitHub (همیشه با آخرین کد هم‌خوان است)
-  if [[ -z "$src_patch" ]]; then
-    local gh_src_url="https://codeload.github.com/silent4time/${PROJECT_NAME}/zip/refs/heads/${GITHUB_BRANCH}"
-    info "Downloading source archive (${GITHUB_BRANCH}) from GitHub..."
-    mkdir -p "$tmp/srcout"
-    if safe_curl "$gh_src_url" -o "$tmp/src.zip" 2>/dev/null && unzip -qo "$tmp/src.zip" -d "$tmp/srcout" 2>/dev/null; then
-      local srcroot
-      for srcroot in "$tmp"/srcout/*/; do
-        if [[ -d "${srcroot}patch" && -d "${srcroot}base" ]]; then
-          src_patch="${srcroot%/}/patch"
-          [[ -f "${srcroot}VERSION" ]] && cp -f "${srcroot}VERSION" "$tmp/VERSION" || true
-          ok "Update package (source archive) downloaded from GitHub."
-          break
-        fi
-      done
-    else
-      warn "Could not download source archive from GitHub."
-    fi
-  fi
-
-  # اولویت ۳: دانلود virabot-latest.zip از GitHub (ریشه ریپو)
-  if [[ -z "$src_patch" ]]; then
-    local gh_zip_url="https://raw.githubusercontent.com/silent4time/${PROJECT_NAME}/${GITHUB_BRANCH}/${ZIP_NAME}"
-    local gh_zip_url2="https://github.com/silent4time/${PROJECT_NAME}/raw/${GITHUB_BRANCH}/${ZIP_NAME}"
-    info "Downloading ${ZIP_NAME} from GitHub..."
-    mkdir -p "$tmp/zipout"
-    if safe_curl "$gh_zip_url" -o "$tmp/latest.zip" 2>/dev/null || safe_curl "$gh_zip_url2" -o "$tmp/latest.zip" 2>/dev/null; then
-      unzip -qo "$tmp/latest.zip" -d "$tmp/zipout" 2>/dev/null || true
-      # ممکن است zip بیرونی فقط install + virabot-latest.zip تو در تو داشته باشد
-      if [[ ! -d "$tmp/zipout/patch" ]]; then
-        local inner
-        inner="$(find "$tmp/zipout" -maxdepth 2 -name "${PROJECT_NAME}*.zip" 2>/dev/null | head -1 || true)"
-        if [[ -n "$inner" && -f "$inner" ]]; then
-          mkdir -p "$tmp/zipinner"
-          unzip -qo "$inner" -d "$tmp/zipinner"
-          if [[ -d "$tmp/zipinner/patch" ]]; then
-            rm -rf "$tmp/zipout"
-            mv "$tmp/zipinner" "$tmp/zipout"
-          fi
-        fi
-      fi
-      if [[ -d "$tmp/zipout/patch" ]]; then
-        src_patch="$tmp/zipout/patch"
-        [[ -f "$tmp/zipout/VERSION" ]] && cp -f "$tmp/zipout/VERSION" "$tmp/VERSION" || true
-        ok "Update package downloaded from GitHub."
-      else
-        local found
-        found="$(find "$tmp/zipout" -type d -name patch 2>/dev/null | head -1 || true)"
-        if [[ -n "$found" ]]; then
-          src_patch="$found"
-          [[ -f "$(dirname "$found")/VERSION" ]] && cp -f "$(dirname "$found")/VERSION" "$tmp/VERSION" || true
-          ok "Update package downloaded from GitHub."
-        fi
+  # اولویت ۲: سرور به‌روزرسانی مورد اعتماد. این مسیر به گیت‌هاب وصل نمی‌شود.
+  if [[ "$prepared_mode" -eq 0 && -z "$src_patch" && -f "${INSTALL_DIR}/update_channel.php" && -f "${INSTALL_DIR}/config.php" ]]; then
+    info "Fetching the package from the configured update server..."
+    mkdir -p "$tmp/channel"
+    if php "${INSTALL_DIR}/update_channel.php" fetch-into "$tmp/channel"; then
+      if [[ -d "$tmp/channel/tree/patch" ]]; then
+        src_patch="$tmp/channel/tree/patch"
+        [[ -f "$tmp/channel/tree/VERSION" ]] && cp -f "$tmp/channel/tree/VERSION" "$tmp/VERSION" || true
+        ok "Package received from the update server."
       fi
     else
-      warn "Could not download ${ZIP_NAME} from GitHub."
-    fi
-  fi
-
-  # اولویت ۴: کلون ریپو (اگر پوشه patch روی گیت‌هاب آپلود شده باشد)
-  if [[ -z "$src_patch" ]]; then
-    info "Fetching latest from GitHub git: $GITHUB_REPO (branch $GITHUB_BRANCH)..."
-    if safe_git_clone "$GITHUB_REPO" "$tmp/repo" 2>/dev/null; then
-      if [[ -d "$tmp/repo/patch" ]]; then
-        src_patch="$tmp/repo/patch"
-        [[ -f "$tmp/repo/VERSION" ]] && cp -f "$tmp/repo/VERSION" "$tmp/VERSION" || true
-        ok "Latest version fetched from GitHub."
-      else
-        # zip داخل کلون
-        local z
-        z="$(find "$tmp/repo" -maxdepth 2 -name "${ZIP_NAME}" 2>/dev/null | head -1 || true)"
-        if [[ -n "$z" ]]; then
-          mkdir -p "$tmp/zipout"
-          unzip -qo "$z" -d "$tmp/zipout"
-          if [[ -d "$tmp/zipout/patch" ]]; then
-            src_patch="$tmp/zipout/patch"
-            [[ -f "$tmp/zipout/VERSION" ]] && cp -f "$tmp/zipout/VERSION" "$tmp/VERSION" || true
-            ok "Extracted patch from repo zip."
-          fi
-        fi
-      fi
+      warn "Update server is disabled, unreachable, or rejected the package."
     fi
   fi
 
   if [[ -z "$src_patch" || ! -d "$src_patch" ]]; then
     err "patch/ folder not found in update source."
-    err "On GitHub upload file: ${ZIP_NAME} (must contain folder patch/)"
-    err "Or put a zip in ${ZIP_DROP_DIR}/"
-    rm -rf "$tmp"
+    err "Put a verified zip in ${ZIP_DROP_DIR}/ or configure the update server in config.php."
+    err "This installer does not download the private repository from GitHub."
+    if [[ "$prepared_mode" -eq 1 && -f "${INSTALL_DIR}/update_channel.php" ]]; then
+      php "${INSTALL_DIR}/update_channel.php" mark-job failed || true
+    fi
+    [[ "$prepared_mode" -eq 1 ]] || rm -rf "$tmp"
+    trap - ERR
     return 1
   fi
+  rm -rf "$(dirname "$src_patch")/update-server"
 
   # v5.7.1: an older installed/cached manage.sh does not know newer files
   # (e.g. panel_sync.php in 5.7.0 never got copied). If the update source has
@@ -1389,14 +1481,18 @@ do_update() {
     fi
     local new_ms="/tmp/${PROJECT_NAME}-manage-update.sh"
     cp -f "$src_root_ms" "$new_ms" && chmod +x "$new_ms"
-    rm -rf "$tmp"
     info "Newer manage.sh found in update source; restarting update with it..."
     export VB_UPDATE_REEXEC=1
+    if [[ "$prepared_mode" -eq 1 ]]; then
+      exec bash "$new_ms" update --prepared "$INSTALL_DIR" "$prepared_dir"
+    fi
+    rm -rf "$tmp"
     exec bash "$new_ms" update
   fi
+  rm -rf "${INSTALL_DIR}/update-server"
 
   info "Applying patch files..."
-  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php panel_sync.php sync_api.php panels.php; do
+  for f in botapi.php function.php index.php admin.php keyboard.php table.php Eylan.php apply_eylan_panels.php eylan_diag.php eylan_wg_diag.php Connectix.php apply_connectix_panels.php apply_fixes.php license_client.php version apply_branding.php ensure_webhook_secret.php panel_sync.php sync_api.php panels.php update_protocol.php update_channel.php; do
     if [[ -f "${src_patch}/${f}" ]]; then
       cp -f "${src_patch}/${f}" "${INSTALL_DIR}/${f}"
       ok "  $f"
@@ -1578,12 +1674,79 @@ try {
   fi
 
   newv="$(version_of "$INSTALL_DIR")"
-  save_state
+  if [[ "${VB_STATE_LOADED:-0}" == "1" ]]; then
+    save_state
+  fi
   sync_script_source "$pkg"
-  rm -rf "$tmp"
+  if [[ "$prepared_mode" -eq 1 ]]; then
+    if [[ -f "${INSTALL_DIR}/update_channel.php" ]]; then
+      php "${INSTALL_DIR}/update_channel.php" mark-job applied || {
+        err "Installed files were copied but the result was not accepted."
+        return 1
+      }
+    fi
+  fi
+  [[ "$prepared_mode" -eq 1 ]] || rm -rf "$tmp"
   cleanup_stale_install_dirs "$INSTALL_DIR"
+  trap - ERR
   ok "Update done: v${current} -> v${newv}"
   info "If needed, re-register webhooks from the Reset menu."
+  info "Database backup (if created) stays in ${bak}. Code rollback archive: ${bak}/code.tar"
+}
+
+do_update_worker() {
+  local lock="${STATE_DIR}/update-worker.lock"
+  mkdir -p "$STATE_DIR"
+  exec 9>"$lock"
+  if ! flock -n 9; then
+    info "Update worker is already running."
+    return 0
+  fi
+  local f dir rc pkg
+  shopt -s nullglob
+  local files=("${INSTANCES_DIR}"/*.env)
+  [[ -f "${STATE_DIR}/install.env" ]] && files+=("${STATE_DIR}/install.env")
+  if [[ ${#files[@]} -eq 0 ]]; then
+    info "No registered install. The worker did nothing."
+    return 0
+  fi
+  for f in "${files[@]}"; do
+    [[ -f "$f" ]] || continue
+    dir="$(grep -E '^INSTALL_DIR=' "$f" | head -1 | cut -d= -f2- | tr -d '"' | tr -d "'")"
+    case "$dir" in
+      ""|*..*|*' '*|*';'*|*'${'*|*'`'*) warn "Skipping an unsafe install path."; continue ;;
+    esac
+    [[ -d "$dir" && -f "$dir/update_channel.php" && -f "$dir/config.php" ]] || continue
+    pkg="$(mktemp -d /tmp/virabot-upd.XXXXXX)"
+    set +e
+    php "$dir/update_channel.php" fetch-job --dest "$pkg"
+    rc=$?
+    set -e
+    if [[ "$rc" -eq 2 ]]; then
+      rm -rf "$pkg"
+      continue
+    fi
+    if [[ "$rc" -ne 0 ]]; then
+      rm -rf "$pkg"
+      warn "Update job failed before install: $dir"
+      continue
+    fi
+    if [[ ! -f "$pkg/tree/patch/botapi.php" ]]; then
+      php "$dir/update_channel.php" mark-job failed || true
+      rm -rf "$pkg"
+      continue
+    fi
+    set +e
+    do_update --prepared "$dir" "$pkg"
+    rc=$?
+    set -e
+    trap - ERR
+    if [[ "$rc" -ne 0 ]]; then
+      warn "Install failed for ${dir}. Code archive, when created, is under ${BACKUP_ROOT}."
+    fi
+    rm -rf "$pkg"
+  done
+  return 0
 }
 
 
@@ -2248,6 +2411,10 @@ do_migrate() {
 #  Main loop
 # ===========================================================================
 main() {
+  if [[ "${1:-}" == "update-selftest" ]]; then
+    update_selftest
+    exit $?
+  fi
   need_root
   _bootstrap_source
   _reexec_if_piped "$@"
@@ -2255,7 +2422,15 @@ main() {
   # Direct arguments (non-interactive flags still work after re-exec)
   case "${1:-}" in
     install) do_install; exit 0 ;;
-    update)  do_update;  exit 0 ;;
+    update)
+      if [[ "${2:-}" == "--prepared" ]]; then
+        do_update --prepared "${3:-}" "${4:-}"
+      else
+        do_update
+      fi
+      exit $?
+      ;;
+    update-worker) do_update_worker; exit $? ;;
     migrate) do_migrate "${2:-}"; exit 0 ;;
     reset)   do_reset;   exit 0 ;;
     remove|uninstall) do_remove; exit 0 ;;
