@@ -49,7 +49,12 @@ function nvpanel_configured(array $panel): bool
 {
     $url = trim((string) ($panel['url_panel'] ?? ''));
     $token = trim((string) ($panel['password_panel'] ?? ''));
-    return ($panel['type'] ?? '') === 'nvpanel' && nvpanel_base_ok($url) && strlen($token) >= 8 && !preg_match("/[\r\n]/", $token);
+    return ($panel['type'] ?? '') === 'nvpanel' && nvpanel_base_ok($url) && strlen($token) >= 8 && strlen($token) <= 200 && !preg_match("/[\r\n]/", $token);
+}
+
+function nvpanel_sales_open(array $panel): bool
+{
+    return nvpanel_configured($panel) && (string) ($panel['status'] ?? '') === 'active';
 }
 
 function nvpanel_key(string $domain, string $panelCode, string $invoice, string $action, string $order = ''): string
@@ -385,15 +390,15 @@ function nvpanel_purchase(array $panel, string $codeProduct, string $usernameHin
     if (in_array($codeProduct, ['customvolume', 'custom_volume', 'usertest'], true)) {
         return ['status' => 'Unsuccessful', 'msg' => 'حجم دلخواه و اکانت تست برای nvpanel پشتیبانی نمی‌شود.'];
     }
-    if (!nvpanel_configured($panel)) {
-        return ['status' => 'Unsuccessful', 'msg' => 'نشانی یا توکن nvpanel تنظیم نشده است.'];
+    if (!nvpanel_sales_open($panel)) {
+        return ['status' => 'Unsuccessful', 'msg' => 'پنل nvpanel خاموش است یا توکن از ترمینال ثبت نشده است.'];
     }
     global $pdo, $domainhosts;
     if (!isset($pdo) || !$pdo instanceof PDO) {
         return ['status' => 'Unsuccessful', 'msg' => 'پایگاه داده در دسترس نیست.'];
     }
     $productId = '';
-    $st = $pdo->prepare('SELECT nv_product_id FROM product WHERE code_product = ? AND (Location = ? OR Location = \'/all\') LIMIT 1');
+    $st = $pdo->prepare('SELECT nv_product_id FROM product WHERE code_product = ? AND Location = ? LIMIT 1');
     $st->execute([$codeProduct, $panel['name_panel']]);
     $productId = trim((string) $st->fetchColumn());
     if (!nvpanel_product_ok($productId)) {
@@ -424,8 +429,8 @@ function nvpanel_purchase(array $panel, string $codeProduct, string $usernameHin
 
 function nvpanel_renew(array $panel, string $username, string $invoiceId, string $orderKey, bool $cron = false): array
 {
-    if (!nvpanel_configured($panel)) {
-        return ['status' => false, 'msg' => 'نشانی یا توکن nvpanel تنظیم نشده است.'];
+    if (!nvpanel_sales_open($panel)) {
+        return ['status' => false, 'msg' => 'پنل nvpanel خاموش است. تمدید انجام نشد.'];
     }
     global $pdo, $domainhosts;
     if (!isset($pdo) || !$pdo instanceof PDO || $orderKey === '') {
@@ -472,6 +477,9 @@ function nvpanel_renew(array $panel, string $username, string $invoiceId, string
 function nvpanel_data_user(array $panel, string $username): array
 {
     global $pdo;
+    if (!nvpanel_sales_open($panel)) {
+        return ['status' => 'Unsuccessful', 'msg' => 'پنل nvpanel خاموش است.'];
+    }
     if (!isset($pdo) || !$pdo instanceof PDO) {
         return ['status' => 'Unsuccessful', 'msg' => 'db'];
     }
@@ -504,6 +512,18 @@ function nvpanel_data_user(array $panel, string $username): array
     ];
 }
 
+function nvpanel_may_map_product(array $product, array $panel): bool
+{
+    if (($panel['type'] ?? '') !== 'nvpanel') {
+        return false;
+    }
+    $loc = (string) ($product['Location'] ?? '');
+    if ($loc === '' || $loc === '/all') {
+        return false;
+    }
+    return $loc === (string) ($panel['name_panel'] ?? '');
+}
+
 function nvpanel_admin_handle(): bool
 {
     if (!function_exists('sendmessage')) {
@@ -514,7 +534,7 @@ function nvpanel_admin_handle(): bool
         return false;
     }
     if (($text ?? '') === 'شناسه محصول nvpanel') {
-        sendmessage($from_id, "کد محصول ویرابات و شناسه محصول درگاه را بفرستید.\nمثال:\n<code>MYCODE 19</code>\nبدون این شناسه خرید انجام نمی‌شود.", null, 'HTML');
+        sendmessage($from_id, "کد محصول ویرابات و شناسه محصول درگاه را بفرستید.\nمثال:\n<code>MYCODE PROD</code>\nشناسه را خودتان از درگاه می‌آورید. عدد پیش‌فرضی استفاده نمی‌شود.", null, 'HTML');
         if (function_exists('step')) {
             step('nvpanel_product_map', $from_id);
         }
@@ -524,12 +544,26 @@ function nvpanel_admin_handle(): bool
         return false;
     }
     if (!preg_match('/^(\S+)\s+([A-Za-z0-9_-]{1,32})$/u', trim((string) $text), $m) || !isset($pdo) || !$pdo instanceof PDO) {
-        sendmessage($from_id, 'قالب نامعتبر است. مثال: MYCODE 19', null, 'HTML');
+        sendmessage($from_id, 'قالب نامعتبر است. مثال: MYCODE PROD', null, 'HTML');
         return true;
     }
-    $st = $pdo->prepare('UPDATE product SET nv_product_id = ? WHERE code_product = ?');
-    $st->execute([$m[2], $m[1]]);
-    sendmessage($from_id, $st->rowCount() > 0 ? 'شناسه محصول درگاه ذخیره شد.' : 'محصولی با این کد پیدا نشد.', null, 'HTML');
+    $st = $pdo->prepare('SELECT code_product, Location FROM product WHERE code_product = ?');
+    $st->execute([$m[1]]);
+    $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+    if (count($rows) !== 1) {
+        sendmessage($from_id, 'این کد باید دقیقاً یک محصول متعلق به همین پنل nvpanel باشد.', null, 'HTML');
+        return true;
+    }
+    $panel = $pdo->prepare('SELECT name_panel, type, status FROM marzban_panel WHERE name_panel = ? LIMIT 1');
+    $panel->execute([$rows[0]['Location']]);
+    $panelRow = $panel->fetch(PDO::FETCH_ASSOC) ?: [];
+    if (!nvpanel_may_map_product($rows[0], $panelRow)) {
+        sendmessage($from_id, 'فقط محصولی که از قبل مال همین پنل nvpanel است تغییر می‌کند. محصول پنل‌های دیگر دست نمی‌خورد.', null, 'HTML');
+        return true;
+    }
+    $upd = $pdo->prepare('UPDATE product SET nv_product_id = ? WHERE code_product = ? AND Location = ?');
+    $upd->execute([$m[2], $m[1], $rows[0]['Location']]);
+    sendmessage($from_id, $upd->rowCount() > 0 ? 'شناسه محصول درگاه ذخیره شد.' : 'محصولی با این کد پیدا نشد.', null, 'HTML');
     if (function_exists('step')) {
         step('home', $from_id);
     }

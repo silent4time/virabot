@@ -720,11 +720,24 @@ if (in_array($text, $textadmin) || $datain == "admin") {
     sendmessage($from_id, $textbotlang['Admin']['managepanel']['Inbound']['getPanelType'], $keyboardtypepanel, 'HTML');
 } elseif (preg_match('/typepanel#(.*)/', $datain, $dataget)) {
     $typepanel = $dataget[1];
+    if ($typepanel === 'nvpanel') {
+        update("user", "Processing_value", "{}", "id", $from_id);
+        step('home', $from_id);
+        sendmessage($from_id, "توکن nvpanel را در ربات نفرستید.\nروی خود سرور، در ترمینال ریشه:\n<code>sudo virabot nvpanel-setup</code>\nپنل بعد از ثبت، خاموش می‌ماند تا بعداً جداگانه فعال شود.", $keyboardadmin, 'HTML');
+        return;
+    }
     sendmessage($from_id, $textbotlang['Admin']['managepanel']['addPanelName'], $backadmin, 'HTML');
     step("add_name_panel", $from_id);
     deletemessage($from_id, $message_id);
     savedata("clear", "type", $typepanel);
 } elseif ($user['step'] == "add_name_panel") {
+    $userdata = json_decode($user['Processing_value'], true);
+    if (($userdata['type'] ?? '') === 'nvpanel') {
+        update("user", "Processing_value", "{}", "id", $from_id);
+        step('home', $from_id);
+        sendmessage($from_id, "ثبت nvpanel فقط با <code>sudo virabot nvpanel-setup</code> است.", $keyboardadmin, 'HTML');
+        return;
+    }
     if (in_array($text, $marzban_list)) {
         sendmessage($from_id, $textbotlang['Admin']['managepanel']['repeatPanel'], $backadmin, 'HTML');
         return;
@@ -742,6 +755,13 @@ if (in_array($text, $textadmin) || $datain == "admin") {
     sendmessage($from_id, $textbotlang['Admin']['managepanel']['addPanelUrl'], $backadmin, 'HTML');
     step('add_link_panel', $from_id);
 } elseif ($user['step'] == "add_link_panel") {
+    $userdata = json_decode($user['Processing_value'] ?? '{}', true) ?: [];
+    if (($userdata['type'] ?? '') === 'nvpanel') {
+        update("user", "Processing_value", "{}", "id", $from_id);
+        step('home', $from_id);
+        sendmessage($from_id, "ثبت nvpanel فقط با <code>sudo virabot nvpanel-setup</code> است.", $keyboardadmin, 'HTML');
+        return;
+    }
     if (!filter_var($text, FILTER_VALIDATE_URL)) {
         sendmessage($from_id, $textbotlang['Admin']['managepanel']['invalidDomain'], $backadmin, 'HTML');
         return;
@@ -767,10 +787,24 @@ if (in_array($text, $textadmin) || $datain == "admin") {
     sendmessage($from_id, $textbotlang['Admin']['managepanel']['usernameSet'], $backadmin, 'HTML');
     step('add_username_panel', $from_id);
 } elseif ($user['step'] == "add_username_panel") {
+    $userdata = json_decode($user['Processing_value'] ?? '{}', true) ?: [];
+    if (($userdata['type'] ?? '') === 'nvpanel') {
+        update("user", "Processing_value", "{}", "id", $from_id);
+        step('home', $from_id);
+        sendmessage($from_id, "ثبت nvpanel فقط با <code>sudo virabot nvpanel-setup</code> است.", $keyboardadmin, 'HTML');
+        return;
+    }
     sendmessage($from_id, $textbotlang['Admin']['managepanel']['getPassword'], $backadmin, 'HTML');
     step('add_password_panel', $from_id);
     savedata("save", "username", $text);
 } elseif ($user['step'] == "add_password_panel") {
+    $userdata = json_decode($user['Processing_value'] ?? '{}', true) ?: [];
+    if (($userdata['type'] ?? '') === 'nvpanel') {
+        update("user", "Processing_value", "{}", "id", $from_id);
+        step('home', $from_id);
+        sendmessage($from_id, "توکن در گفتگو ذخیره نشد. از ترمینال ریشه استفاده کنید:\n<code>sudo virabot nvpanel-setup</code>", $keyboardadmin, 'HTML');
+        return;
+    }
     savedata("save", "password", $text);
     $userdata = json_decode($user['Processing_value'] ?? '{}', true) ?: [];
     // type از مراحل قبل در Processing_value هست
@@ -807,6 +841,13 @@ if (in_array($text, $textadmin) || $datain == "admin") {
     goto virabot_save_panel;
 } elseif ($user['step'] == "getlimitedpanel") {
     virabot_save_panel:
+    $userdata = json_decode($user['Processing_value'] ?? '{}', true) ?: [];
+    if (($userdata['type'] ?? '') === 'nvpanel') {
+        update("user", "Processing_value", "{}", "id", $from_id);
+        step('home', $from_id);
+        sendmessage($from_id, "پنل nvpanel از گفتگو ساخته نمی‌شود و توکن ذخیره نشد. در ترمینال ریشه:\n<code>sudo virabot nvpanel-setup</code>", $keyboardadmin, 'HTML');
+        return;
+    }
     savedata("save", "limitpanel", $text);
     $userdata = json_decode($user['Processing_value'], true);
     $randomString = bin2hex(random_bytes(2));
@@ -4413,6 +4454,12 @@ $cfgBody2 = preg_replace(
     sendmessage($from_id, $textbotlang['Admin']['managepanel']['getUrlNew'], $backadmin, 'HTML');
     step('GeturlNew', $from_id);
 } elseif ($user['step'] == "GeturlNew") {
+    $typepanel = select("marzban_panel", "*", "name_panel", $user['Processing_value'], "select");
+    if (($typepanel['type'] ?? '') === 'nvpanel') {
+        step('home', $from_id);
+        sendmessage($from_id, "نشانی nvpanel از گفتگو عوض نمی‌شود. در ترمینال ریشه:\n<code>sudo virabot nvpanel-setup</code>", $keyboardadmin, 'HTML');
+        return;
+    }
     if (!filter_var($text, FILTER_VALIDATE_URL)) {
         sendmessage($from_id, $textbotlang['Admin']['managepanel']['invalidDomain'], $backadmin, 'HTML');
         return;
@@ -4439,6 +4486,11 @@ $cfgBody2 = preg_replace(
         return;
     }
     $typepanel = select("marzban_panel", "*", "name_panel", $user['Processing_value'], "select");
+    if (($typepanel['type'] ?? '') === 'nvpanel') {
+        step('home', $from_id);
+        sendmessage($from_id, "نشانی nvpanel از گفتگو عوض نمی‌شود. در ترمینال ریشه:\n<code>sudo virabot nvpanel-setup</code>", $keyboardadmin, 'HTML');
+        return;
+    }
     if ($typepanel['type'] == "x-ui_single") {
         $req = new CurlRequest($text);
         $response = $req->get();
@@ -4530,10 +4582,20 @@ $cfgBody2 = preg_replace(
     update("x_ui", "protocol", $text, "codepanel", $marzbanprotocol['code_panel']);
     step('home', $from_id);
 } elseif (($text == $textbotlang['keyboard']['editPassword'] || $text == '🔑 ویرایش کلید API') && $adminrulecheck['rule'] == "administrator") {
+    $typepanel = select("marzban_panel", "*", "name_panel", $user['Processing_value'], "select");
+    if (($typepanel['type'] ?? '') === 'nvpanel') {
+        sendmessage($from_id, "توکن nvpanel را در ربات نفرستید. تعویض فقط با <code>sudo virabot nvpanel-setup</code> و تأیید yes است.", $keyboardadmin, 'HTML');
+        return;
+    }
     sendmessage($from_id, $textbotlang['Admin']['managepanel']['getPasswordNew'], $backadmin, 'HTML');
     step('GetpaawordNew', $from_id);
 } elseif ($user['step'] == "GetpaawordNew") {
     $typepanel = select("marzban_panel", "*", "name_panel", $user['Processing_value'], "select");
+    if (($typepanel['type'] ?? '') === 'nvpanel') {
+        step('home', $from_id);
+        sendmessage($from_id, "توکن در گفتگو ذخیره نشد. از ترمینال ریشه استفاده کنید:\n<code>sudo virabot nvpanel-setup</code>", $keyboardadmin, 'HTML');
+        return;
+    }
     outtypepanel($typepanel['type'], $textbotlang['Admin']['managepanel']['changedPasswordPanel']);
     update("marzban_panel", "password_panel", $text, "name_panel", $user['Processing_value']);
     update("marzban_panel", "datelogin", null, "name_panel", $user['Processing_value']);
