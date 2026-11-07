@@ -703,6 +703,14 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     #--------------[ day ]---------------#
     $timeDiff = $DataUserOut['expire'] - time();
     $day = $DataUserOut['expire'] ? floor($timeDiff / 86400) . $textbotlang['users']['status']['day'] : $textbotlang['users']['status']['unlimited'];
+    if (!empty($DataUserOut['_nvpanel'])) {
+        $expirationDate = ($DataUserOut['_nv_expire'] ?? '') !== '' ? (string) $DataUserOut['_nv_expire'] : 'هنوز شروع نشده';
+        $LastTraffic = '—';
+        $RemainingVolume = '—';
+        $usedTrafficGb = '—';
+        $day = ($DataUserOut['_nv_remaining'] === null || $DataUserOut['_nv_remaining'] === '') ? 'نامشخص' : (string) $DataUserOut['_nv_remaining'];
+        $status_var = (string) ($DataUserOut['_nv_status'] ?? $status_var);
+    }
     #-----------------------------#
 
 
@@ -1879,6 +1887,10 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
         update("invoice", "price_product", $prodcut['price_product'], "id_invoice", $nameloc['id_invoice']);
     }
     $extend = $ManagePanel->extend($marzban_list_get['Methodextend'], $prodcut['Volume_constraint'], $prodcut['Service_time'], $nameloc['username'], $prodcut['code_product'], $marzban_list_get['code_panel']);
+    if (!empty($extend['_nvpanel_hold'])) {
+        sendmessage($from_id, 'تمدید nvpanel هنوز قطعی نیست. مبلغ برنگشته و درخواست تازه زده نمی‌شود.', null, 'HTML');
+        return;
+    }
     if (!empty($extend['status']) && function_exists('vb_sync_renewed')) vb_sync_renewed($marzban_list_get['name_panel'], $nameloc['username'], $from_id);
     if ($extend['status'] == false) {
         $extend['msg'] = json_encode($extend['msg']);
@@ -2530,6 +2542,14 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     #--------------[ day ]---------------#
     $timeDiff = $DataUserOut['expire'] - time();
     $day = $DataUserOut['expire'] ? floor($timeDiff / 86400) . $textbotlang['users']['status']['day'] : $textbotlang['users']['status']['unlimited'];
+    if (!empty($DataUserOut['_nvpanel'])) {
+        $expirationDate = ($DataUserOut['_nv_expire'] ?? '') !== '' ? (string) $DataUserOut['_nv_expire'] : 'هنوز شروع نشده';
+        $LastTraffic = '—';
+        $RemainingVolume = '—';
+        $usedTrafficGb = '—';
+        $day = ($DataUserOut['_nv_remaining'] === null || $DataUserOut['_nv_remaining'] === '') ? 'نامشخص' : (string) $DataUserOut['_nv_remaining'];
+        $status_var = (string) ($DataUserOut['_nv_status'] ?? $status_var);
+    }
     #--------------[ subsupdate ]---------------#
     if ($DataUserOut['sub_updated_at'] !== null) {
         $sub_updated = $DataUserOut['sub_updated_at'];
@@ -2846,6 +2866,14 @@ if ($text == "/start" || $datain == "start" || $text == "start") {
     #--------------[ day ]---------------#
     $timeDiff = $DataUserOut['expire'] - time();
     $day = $DataUserOut['expire'] ? floor($timeDiff / 86400) . $textbotlang['users']['status']['day'] : $textbotlang['users']['status']['unlimited'];
+    if (!empty($DataUserOut['_nvpanel'])) {
+        $expirationDate = ($DataUserOut['_nv_expire'] ?? '') !== '' ? (string) $DataUserOut['_nv_expire'] : 'هنوز شروع نشده';
+        $LastTraffic = '—';
+        $RemainingVolume = '—';
+        $usedTrafficGb = '—';
+        $day = ($DataUserOut['_nv_remaining'] === null || $DataUserOut['_nv_remaining'] === '') ? 'نامشخص' : (string) $DataUserOut['_nv_remaining'];
+        $status_var = (string) ($DataUserOut['_nv_status'] ?? $status_var);
+    }
     #-----------------------------#
     $textinfoadmin = sprintf($textbotlang['hardcoded']['deleteServiceRequestAdmin'], $from_id, $username, $nameloc['username'], $status_var, $nameloc['Service_location'], $nameloc['id_invoice'], $lastonline, $usedTrafficGb, $LastTraffic, $RemainingVolume, $expirationDate, $day, $userdata['descritionsremove']);
     $confirmremoveadmin = json_encode([
@@ -3116,7 +3144,9 @@ if ($user['step'] == "createusertest" || $user['step'] == "createusertest_cx" ||
     $Status = "active";
     $stmt->execute([$from_id, $randomString, $username_ac, $date, $marzban_list_get['name_panel'], $info_product['name_product'], $info_product['price_product'], $marzban_list_get['val_usertest'], $marzban_list_get['time_usertest'], $Status, $notifctions]);
     $dataoutput = array('username' => null, 'msg' => '');
-    if (($marzban_list_get['type'] ?? '') === 'connectix' && function_exists('connectix_create_client')) {
+    if (($marzban_list_get['type'] ?? '') === 'nvpanel') {
+        $dataoutput['msg'] = 'اکانت تست برای nvpanel پشتیبانی نمی‌شود.';
+    } elseif (($marzban_list_get['type'] ?? '') === 'connectix' && function_exists('connectix_create_client')) {
         $cxPlan = '';
         if (!empty($user['Processing_value_tow']) && $user['Processing_value_tow'] !== 'getextenduser') {
             $cxPlan = (string) $user['Processing_value_tow'];
@@ -7325,6 +7355,10 @@ if (isset($update['message']['successful_payment'])) {
     $Balance_Low_user = $user['Balance'] - $prodcut['price_product'];
     update("user", "Balance", $Balance_Low_user, "id", $from_id);
     $extend = $ManagePanel->extend($marzban_list_get['Methodextend'], $prodcut['Volume_constraint'], $prodcut['Service_time'], $usernamePanelExtends, $prodcut['code_product'], $marzban_list_get['code_panel']);
+    if (!empty($extend['_nvpanel_hold'])) {
+        sendmessage($from_id, 'تمدید nvpanel هنوز قطعی نیست. مبلغ برنگشته و درخواست تازه زده نمی‌شود.', null, 'HTML');
+        return;
+    }
     if (!empty($extend['status']) && function_exists('vb_sync_renewed')) vb_sync_renewed($marzban_list_get['name_panel'], $usernamePanelExtends, $from_id);
     if ($extend['status'] == false) {
         $extend['msg'] = json_encode($extend['msg']);

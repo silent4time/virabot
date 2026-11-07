@@ -3,6 +3,38 @@ require_once __DIR__ . '/inc/config.php';
 require_once __DIR__ . '/inc/icons.php';
 require_auth();
 
+if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'queue_update' && function_exists('vb_update_enqueue')) {
+    csrf_check_post();
+    $postedNonce = (string) ($_POST['update_nonce'] ?? '');
+    $sessionNonce = (string) ($_SESSION['vb_update_nonce'] ?? '');
+    unset($_SESSION['vb_update_nonce']);
+    $adminRow = db_fetch($pdo, "SELECT id_admin, rule FROM admin WHERE username = ?", [$_SESSION['admin_user']]);
+    $root = dirname(__DIR__);
+    if ($sessionNonce === '' || !hash_equals($sessionNonce, $postedNonce)) {
+        flash('error', 'این فرم یک‌بار مصرف است. صفحه را تازه کنید.');
+    } elseif (!$adminRow || (string) ($adminRow['rule'] ?? '') !== 'administrator') {
+        flash('error', 'فقط مدیر اصلی می‌تواند به‌روزرسانی را صف کند.');
+    } else {
+        $info = vb_update_availability($root);
+        if (($info['state'] ?? '') !== 'available') {
+            flash('error', 'نسخهٔ تازه‌ای برای صف کردن نیست و نصبی انجام نشد.');
+        } else {
+            $queued = vb_update_enqueue($root, [
+                'from_id' => (string) $adminRow['id_admin'],
+                'rule' => 'administrator',
+                'in_admin_ids' => true,
+            ], (string) $info['remote'], time());
+            if (!empty($queued['ok'])) {
+                flash('success', 'به‌روزرسانی در صف قرار گرفت. تا اجرای کارگر ریشه هیچ فایلی عوض نمی‌شود.');
+            } else {
+                flash('error', 'صف ساخته نشد و نصبی انجام نشد.');
+            }
+        }
+    }
+    header('Location: settings.php?tab=update');
+    exit;
+}
+
 if ($_SERVER['REQUEST_METHOD'] === 'POST' && ($_POST['action'] ?? '') === 'change_password') {
     csrf_check_post();
     $cur = $_POST['current_password'] ?? '';
@@ -52,6 +84,7 @@ $tabs = [
     'security' => ['icon' => 'block', 'label' => $textbotlang['panel']['settingsTabSecurity']],
     'system' => ['icon' => 'dashboard', 'label' => $textbotlang['panel']['settingsTabSystem']],
     'backup' => ['icon' => 'dashboard', 'label' => 'بکاپ'],
+    'update' => ['icon' => 'settings', 'label' => 'به‌روزرسانی'],
 ];
 
 $pageTitle = $textbotlang['panel']['settingsTitle'];
@@ -289,6 +322,61 @@ include __DIR__ . '/inc/layout_head.php';
         </div>
     </div>
 
+<?php elseif ($tab === 'update'):
+    $vbRoot = dirname(__DIR__);
+    $vbAdmin = db_fetch($pdo, "SELECT id_admin, rule FROM admin WHERE username = ?", [$_SESSION['admin_user']]);
+    $vbOwner = (string) ($vbAdmin['rule'] ?? '') === 'administrator';
+    $vbInfo = function_exists('vb_update_availability') ? vb_update_availability($vbRoot) : ['state' => 'error', 'message' => 'ماژول به‌روزرسانی بارگذاری نشده است.', 'local' => '', 'remote' => ''];
+    $vbStatus = function_exists('vb_update_status_text') ? vb_update_status_text($vbRoot) : '';
+    if ($vbOwner && empty($_SESSION['vb_update_nonce'])) {
+        $_SESSION['vb_update_nonce'] = bin2hex(random_bytes(16));
+    }
+    ?>
+    <div class="card fade-up">
+        <div class="card-head">
+            <div>
+                <div class="card-title">به‌روزرسانی ویرابات</div>
+                <div class="card-subtitle">انتشار پایدار عمومی گیت‌هاب، بدون توکن</div>
+            </div>
+        </div>
+        <div class="card-body" style="display:flex;flex-direction:column;gap:16px">
+            <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 640 150" role="img" aria-label="مسیر به‌روزرسانی" style="width:100%;height:auto;background:var(--sf);border:1px solid var(--bd);border-radius:10px">
+                <style>text{font-family:Vazirmatn,Tahoma,sans-serif}</style>
+                <rect x="16" y="36" width="170" height="78" rx="10" fill="#1c1a16" stroke="#f0c43a"/>
+                <text x="101" y="68" fill="#f6f3ea" font-size="14" text-anchor="middle">ربات نصب‌شده</text>
+                <text x="101" y="92" fill="#c8c8c8" font-size="12" text-anchor="middle">بدون توکن گیت‌هاب</text>
+                <rect x="235" y="36" width="170" height="78" rx="10" fill="#1c1a16" stroke="#f0c43a"/>
+                <text x="320" y="68" fill="#f6f3ea" font-size="14" text-anchor="middle">انتشار عمومی</text>
+                <text x="320" y="92" fill="#c8c8c8" font-size="12" text-anchor="middle">api.github.com</text>
+                <rect x="454" y="36" width="170" height="78" rx="10" fill="#12110e" stroke="#6e6e6e"/>
+                <text x="539" y="68" fill="#f6f3ea" font-size="14" text-anchor="middle">بسته و SHA-256</text>
+                <text x="539" y="92" fill="#c8c8c8" font-size="12" text-anchor="middle">امضای ناشر نیست</text>
+                <path d="M186 75 H235" stroke="#f0c43a" stroke-width="2"/>
+                <path d="M405 75 H454" stroke="#f0c43a" stroke-width="2"/>
+            </svg>
+            <div class="kv-list">
+                <div class="kv"><span class="kv-key">وضعیت</span><span class="kv-val"><?= htmlspecialchars((string) ($vbInfo['message'] ?? ''), ENT_QUOTES, 'UTF-8') ?></span></div>
+                <div class="kv"><span class="kv-key">نسخهٔ نصب</span><span class="kv-val cm"><?= htmlspecialchars((string) ($vbInfo['local'] ?? ''), ENT_QUOTES, 'UTF-8') ?></span></div>
+                <div class="kv"><span class="kv-key">نسخهٔ پایدار</span><span class="kv-val cm"><?= htmlspecialchars((string) ($vbInfo['remote'] ?? '—'), ENT_QUOTES, 'UTF-8') ?></span></div>
+                <?php if ($vbStatus !== ''): ?>
+                    <div class="kv"><span class="kv-key">صف</span><span class="kv-val"><?= htmlspecialchars($vbStatus, ENT_QUOTES, 'UTF-8') ?></span></div>
+                <?php endif; ?>
+            </div>
+            <?php if ($vbOwner && ($vbInfo['state'] ?? '') === 'available'): ?>
+                <form method="POST">
+                    <input type="hidden" name="_csrf" value="<?= htmlspecialchars(csrf_token(), ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="update_nonce" value="<?= htmlspecialchars((string) $_SESSION['vb_update_nonce'], ENT_QUOTES, 'UTF-8') ?>">
+                    <input type="hidden" name="action" value="queue_update">
+                    <button type="submit" class="btn btn-primary" style="width:auto">صف به‌روزرسانی به نسخهٔ <?= htmlspecialchars((string) $vbInfo['remote'], ENT_QUOTES, 'UTF-8') ?></button>
+                </form>
+                <p style="color:var(--mute);font-size:.85rem;margin:0">این دکمه فقط درخواست را در صف می‌نویسد. نصب را کارگر ریشه با <span class="cm">sudo virabot update-worker</span> انجام می‌دهد. پیکربندی، پایگاه داده و پرداخت‌ها بازنویسی نمی‌شوند.</p>
+            <?php elseif (!$vbOwner): ?>
+                <p style="margin:0">فقط مدیر اصلی این کار را می‌بیند.</p>
+            <?php else: ?>
+                <p style="color:var(--mute);font-size:.85rem;margin:0">دکمهٔ نصب وقتی روشن می‌شود که کانال پیکربندی شده باشد و نسخهٔ پایدار جدیدتر باشد.</p>
+            <?php endif; ?>
+        </div>
+    </div>
 <?php endif; ?>
 
 <script src="js/settings.js"></script>

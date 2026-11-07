@@ -1083,6 +1083,10 @@ function DirectPayment($order_id, $image = 'images.jpg')
             'limit_ip' => $maxUsersBuy,
         );
         $dataoutput = vb_sync_create_user($ManagePanel, $marzban_list_get['name_panel'], $info_product['code_product'], $username_ac, $datac, $Balance_id['id']);
+        if (!empty($dataoutput['_nvpanel_hold'])) {
+            sendmessage($Balance_id['id'], "پرداخت ثبت شد ولی ساخت سرویس nvpanel هنوز قطعی نیست.\nمبلغ برنگشته و خرید تازه‌ای زده نمی‌شود.\n" . ($dataoutput['msg'] ?? ''), $keyboard, 'HTML');
+            return;
+        }
         if ($dataoutput['username'] == null) {
             $dataoutput['msg'] = json_encode($dataoutput['msg']);
             $balance = $Balance_id['Balance'] + $Payment_report['price'];
@@ -1166,6 +1170,11 @@ function DirectPayment($order_id, $image = 'images.jpg')
                 error_log('eylan deliver: ' . $e->getMessage());
                 sendmessage($get_invoice['id_user'], $textcreatuser, $Shoppinginfo, 'HTML');
             }
+        } elseif (($marzban_list_get['type'] ?? '') === 'nvpanel' || !empty($dataoutput['_nvpanel'])) {
+            $msg = function_exists('nvpanel_message')
+                ? nvpanel_message((string) $dataoutput['username'], (string) ($dataoutput['_nv_password'] ?? ''), 'فعال', null)
+                : ('نام کاربری: ' . $dataoutput['username']);
+            sendmessage($get_invoice['id_user'], $msg, $Shoppinginfo, 'HTML');
         } elseif (($marzban_list_get['type'] ?? '') === 'connectix' || !empty($dataoutput['_connectix'])) {
             try {
                 $cxPass = $dataoutput['_cx_password'] ?? '';
@@ -1368,7 +1377,14 @@ function DirectPayment($order_id, $image = 'images.jpg')
         $DataUserOut = $ManagePanel->DataUser($nameloc['Service_location'], $nameloc['username']);
         $Balance_Low_user = 0;
         update("user", "Balance", $Balance_Low_user, "id", $Balance_id['id']);
+        if (($marzban_list_get['type'] ?? '') === 'nvpanel' && function_exists('nvpanel_bind_order')) {
+            nvpanel_bind_order((string) $nameloc['id_invoice'], 'so:' . (string) ($data_order['id'] ?? ''));
+        }
         $extend = $ManagePanel->extend($marzban_list_get['Methodextend'], $prodcut['Volume_constraint'], $prodcut['Service_time'], $nameloc['username'], $prodcut['code_product'], $marzban_list_get['code_panel']);
+        if (!empty($extend['_nvpanel_hold'])) {
+            sendmessage($Balance_id['id'], "پرداخت تمدید ثبت شد ولی نتیجه nvpanel هنوز قطعی نیست. مبلغ برنگشته و تمدید تازه زده نمی‌شود.", $keyboard, 'HTML');
+            return false;
+        }
         if (!empty($extend['status']) && function_exists('vb_sync_renewed')) vb_sync_renewed($marzban_list_get['name_panel'], $nameloc['username'], $Balance_id['id']);
         if ($extend['status'] == false) {
             $balance = $Balance_id['Balance'] + $Payment_report['price'];
@@ -1714,6 +1730,9 @@ function outtypepanel($typepanel, $message)
         sendmessage($from_id, $message, $option_eylan, 'HTML');
     } elseif ($typepanel == "connectix") {
         sendmessage($from_id, $message, $option_connectix, 'HTML');
+    } elseif ($typepanel == "nvpanel") {
+        global $option_nvpanel;
+        sendmessage($from_id, $message, $option_nvpanel, 'HTML');
     }
 }
 
@@ -3345,4 +3364,11 @@ if (!function_exists('vb_sync_create_user')) {
             }
         }
     }
+}
+
+if (is_file(__DIR__ . '/update_channel.php')) {
+    require_once __DIR__ . '/update_channel.php';
+}
+if (is_file(__DIR__ . '/nvpanel.php')) {
+    require_once __DIR__ . '/nvpanel.php';
 }

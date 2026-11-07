@@ -1,0 +1,12 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 720 220" role="img">
+  <title>??????????? ?????? ?? ??????? ?????</title>
+  <style>text{font-family:Vazirmatn,Tahoma,sans-serif}</style>
+  <rect width="720" height="220" fill="#12110e"/>
+  <rect x="30" y="50" width="250" height="120" rx="12" fill="#1c1a16" stroke="#f0c43a"/>
+  <text x="155" y="100" fill="#f6f3ea" font-size="18" text-anchor="middle">???? ???????</text>
+  <text x="155" y="130" fill="#c8c8c8" font-size="14" text-anchor="middle">???? ????</text>
+  <rect x="420" y="50" width="270" height="120" rx="12" fill="#1c1a16" stroke="#f0c43a"/>
+  <text x="555" y="95" fill="#f6f3ea" font-size="18" text-anchor="middle">?????? ?????</text>
+  <text x="555" y="125" fill="#c8c8c8" font-size="14" text-anchor="middle">zip ? SHA-256</text>
+  <path d="M280 110 H420" stroke="#f0c43a" stroke-width="2"/>
+</svg>

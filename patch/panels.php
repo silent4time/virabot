@@ -1,4 +1,5 @@
 <?php
+if (is_file(__DIR__ . '/nvpanel.php')) { require_once __DIR__ . '/nvpanel.php'; }
 if (is_file(__DIR__ . '/Connectix.php')) { require_once __DIR__ . '/Connectix.php'; }
 if (is_file(__DIR__ . '/Eylan.php')) { require_once __DIR__ . '/Eylan.php'; }
 ini_set('error_log', 'error_log');
@@ -69,6 +70,9 @@ class ManagePanel
         $expire = $Data_Config['expire'];
         $data_limit = $Data_Config['data_limit'];
         $note = "{$Data_Config['from_id']} | {$Data_Config['username']} | {$Data_Config['type']}";
+        if (($Get_Data_Panel['type'] ?? '') === 'nvpanel' && function_exists('nvpanel_purchase')) {
+            return nvpanel_purchase($Get_Data_Panel, $code_product, $usernameC, $Data_Config);
+        }
         if ($Get_Data_Panel['type'] == "marzban") {
             //create user
             $ConnectToPanel = adduser($Get_Data_Panel['name_panel'], $data_limit, $usernameC, $expire, $note, $Get_Data_Product['data_limit_reset'], $Get_Data_Product['name_product']);
@@ -583,6 +587,9 @@ class ManagePanel
             $invoice = select("invoice", "*", "username", $username, "select");
         } else {
             $invoice = false;
+        }
+        if (($Get_Data_Panel['type'] ?? '') === 'nvpanel' && function_exists('nvpanel_data_user')) {
+            return nvpanel_data_user($Get_Data_Panel, $username);
         }
         if ($Get_Data_Panel['type'] == "marzban") {
             $UsernameData = getuser($username, $Get_Data_Panel['name_panel']);
@@ -2212,6 +2219,21 @@ class ManagePanel
                 'msg' => 'data not found'
             );
         }
+        if (($panel['type'] ?? '') === 'nvpanel') {
+            if (($code_product ?? '') === 'custom_volume' || ($code_product ?? '') === 'customvolume') {
+                return ['status' => false, 'msg' => 'تمدید با حجم دلخواه برای nvpanel پشتیبانی نمی‌شود.'];
+            }
+            $bind = $GLOBALS['nvpanel_order'] ?? null;
+            $invoiceId = is_array($bind) ? (string) ($bind['invoice'] ?? '') : '';
+            $orderKey = is_array($bind) ? (string) ($bind['order'] ?? '') : '';
+            if ($invoiceId === '' && is_array($invoice)) {
+                $invoiceId = (string) ($invoice['id_invoice'] ?? '');
+            }
+            if ($orderKey === '') {
+                $orderKey = 'auto';
+            }
+            return nvpanel_renew($panel, $username, $invoiceId, $orderKey);
+        }
         if (($panel['type'] ?? '') === 'connectix' && function_exists('connectix_extend_client')) {
             $planId = function_exists('connectix_plan_id_from_product') ? connectix_plan_id_from_product($product) : '';
             if ($planId === '') {
@@ -2451,6 +2473,9 @@ class ManagePanel
                 'msg' => 'data not found'
             );
         }
+        if (($panel['type'] ?? '') === 'nvpanel') {
+            return ['status' => false, 'msg' => 'خرید حجم اضافه برای nvpanel پشتیبانی نمی‌شود. تمدید فقط با محصول خود سرویس است.'];
+        }
         $notif_value = json_decode($invoice['notifctions'], true);
         $notifctions = json_encode(array(
             'volume' => false,
@@ -2583,6 +2608,9 @@ class ManagePanel
                 'status' => false,
                 'msg' => 'data not found'
             );
+        }
+        if (($panel['type'] ?? '') === 'nvpanel') {
+            return ['status' => false, 'msg' => 'خرید زمان اضافه برای nvpanel پشتیبانی نمی‌شود. تمدید فقط با محصول خود سرویس است.'];
         }
         $notif_value = json_decode($invoice['notifctions'], true);
         $notifctions = json_encode(array(

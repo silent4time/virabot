@@ -221,19 +221,29 @@
 
 ## ⚙️ نصب
 
+مخزن عمومی است. می‌توانید بسته و فایل جمع‌بررسی را کنار هم بگذارید. اگر `GITHUB_TOKEN` در محیط باشد نادیده گرفته می‌شود:
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/silent4time/virabot/main/install.sh | sudo bash
+sudo bash install.sh /root/virabot-update.zip
 ```
 
 از منو گزینه **1) Install** را بزنید. دامنه، توکن تلگرام، توکن بله و اطلاعات دیتابیس پرسیده می‌شود.
 
 ## 🔄 آپدیت
 
+از نسخهٔ ۵٫۸٫۰ به‌روزرسانی از انتشار پایدار عمومی گیت‌هاب، بدون توکن، گرفته می‌شود. فایل‌ها `virabot-update.zip` و `virabot-update.zip.sha256` هستند. جمع‌بررسی امضای ناشر نیست. جزئیات در [docs/UPDATE_SYSTEM.md](docs/UPDATE_SYSTEM.md) است.
+
+کنار بستهٔ محلی باید همان فایل جمع‌بررسی باشد:
+
 ```bash
-sudo virabot update
+sudo bash install.sh /root/virabot-update.zip update
 ```
 
-یا از منو گزینه **2) Update**. قبل از آپدیت از فایل‌های اصلی بکاپ گرفته می‌شود.
+یا بعد از پیکربندی کانال، از منوی مدیر ربات یا تب به‌روزرسانی پنل وب درخواست را در صف بگذارید و بعد:
+
+```bash
+sudo virabot update-worker
+```
 
 ## 📋 منوی مدیریت
 
@@ -489,19 +499,22 @@ Each install has its own file in `/etc/virabot/instances`. If more than one exis
 
 ## ⚙️ Install
 
+The repository is public. Put the zip and its `.sha256` file together. A GitHub token in the environment is ignored.
+
 ```bash
-curl -fsSL https://raw.githubusercontent.com/silent4time/virabot/main/install.sh | sudo bash
+sudo bash install.sh /root/virabot-update.zip
 ```
 
 Choose **1) Install**. The script asks for the domain, Telegram token, Bale token, and database details.
 
 ## 🔄 Update
 
-```bash
-sudo virabot update
-```
+From 5.8.0 the bot reads the public stable GitHub release directly, with no token. The checksum file is an unsigned SHA-256, not a publisher signature. See [docs/UPDATE_SYSTEM.md](docs/UPDATE_SYSTEM.md).
 
-Or choose **2) Update**. Core files are backed up first.
+```bash
+sudo bash install.sh /root/virabot-update.zip update
+sudo virabot update-worker
+```
 
 ## 📋 Management menu
 

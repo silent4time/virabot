@@ -1,0 +1,15 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 200" role="img">
+  <title>.1Ì/ nvpanel</title>
+  <style>text{font-family:Vazirmatn,Tahoma,sans-serif}</style>
+  <rect width="760" height="200" fill="#12110e"/>
+  <rect x="20" y="50" width="200" height="90" rx="10" fill="#1c1a16" stroke="#f0c43a"/>
+  <text x="120" y="100" fill="#f6f3ea" font-size="16" text-anchor="middle">~1/'.* /1 1('*</text>
+  <rect x="280" y="50" width="200" height="90" rx="10" fill="#1c1a16" stroke="#f0c43a"/>
+  <text x="380" y="90" fill="#f6f3ea" font-size="16" text-anchor="middle">/1¯'G nvpanel</text>
+  <text x="380" y="115" fill="#c8c8c8" font-size="13" text-anchor="middle">*H©F E51A©FF/G</text>
+  <rect x="540" y="50" width="200" height="90" rx="10" fill="#1c1a16" stroke="#f0c43a"/>
+  <text x="640" y="90" fill="#f6f3ea" font-size="16" text-anchor="middle">F'E ©'1(1Ì H 1E2</text>
+  <text x="640" y="115" fill="#c8c8c8" font-size="13" text-anchor="middle">(/HF DÌF© '4*1'©</text>
+  <path d="M220 95 H280" stroke="#f0c43a"/>
+  <path d="M480 95 H540" stroke="#f0c43a"/>
+</svg>

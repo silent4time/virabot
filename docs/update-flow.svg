@@ -1,0 +1,28 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 760 520" role="img" aria-labelledby="title">
+  <title id="title">,1Ì'F F5( Ì© (G1H213'FÌ</title>
+  <style>text{font-family:Vazirmatn,Tahoma,sans-serif}</style>
+  <rect width="760" height="520" fill="#12110e"/>
+  <g fill="#1c1a16" stroke="#f0c43a">
+    <rect x="180" y="24" width="400" height="58" rx="10"/>
+    <rect x="180" y="108" width="400" height="58" rx="10"/>
+    <rect x="180" y="192" width="400" height="58" rx="10"/>
+    <rect x="180" y="276" width="400" height="58" rx="10"/>
+    <rect x="180" y="360" width="400" height="58" rx="10"/>
+    <rect x="180" y="444" width="400" height="52" rx="10"/>
+  </g>
+  <g fill="#f6f3ea" font-size="16" text-anchor="middle">
+    <text x="380" y="58">E/Ì1 '5DÌ /©EG 1' /1 1('* Ì' ~FD H( EÌ2F/</text>
+    <text x="380" y="142">/©EG Ì©('1E51A '3* H AB7 E/Ì1 '5DÌ B(HD EÌ4H/</text>
+    <text x="380" y="226">Ì© A'ÌD 5A (' 9ED +'(* apply_release FH4*G EÌ4H/</text>
+    <text x="380" y="310">©'1¯1 1Ì4G (3*G 1' '2 31H1 EH1/ '9*E'/ EÌ¯Ì1/</text>
+    <text x="380" y="394">SHA-256 H 3'.*'1 2Ì~ (113Ì EÌ4H/ (9/ (©'~</text>
+    <text x="380" y="476">'¯1 ©~Ì 4©3* (.H1/ ©/ (1EÌ¯1// H EHABÌ* +(* FEÌ4H/</text>
+  </g>
+  <g stroke="#f0c43a" stroke-width="2">
+    <path d="M380 82 V108"/>
+    <path d="M380 166 V192"/>
+    <path d="M380 250 V276"/>
+    <path d="M380 334 V360"/>
+    <path d="M380 418 V444"/>
+  </g>
+</svg>
