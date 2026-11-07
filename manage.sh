@@ -1459,18 +1459,28 @@ do_update() {
     fi
   fi
 
-  # اولویت ۲: سرور به‌روزرسانی مورد اعتماد. این مسیر به گیت‌هاب وصل نمی‌شود.
-  if [[ "$prepared_mode" -eq 0 && -z "$src_patch" && -f "${INSTALL_DIR}/update_channel.php" && -f "${INSTALL_DIR}/config.php" ]]; then
+  # اولویت ۲: انتشار پایدار عمومی، بدون توکن. اسکریپت تازه هم می‌تواند برای نصب قدیمی دانلود کند.
+  if [[ "$prepared_mode" -eq 0 && -z "$src_patch" && -n "$phpbin" && -d "$INSTALL_DIR" ]]; then
     info "Fetching the public GitHub release (no token)..."
     mkdir -p "$tmp/channel"
-    if php "${INSTALL_DIR}/update_channel.php" fetch-into "$tmp/channel"; then
+    if php "$phpbin" fetch-into "$tmp/channel" "$INSTALL_DIR"; then
       if [[ -d "$tmp/channel/tree/patch" ]]; then
         src_patch="$tmp/channel/tree/patch"
         [[ -f "$tmp/channel/tree/VERSION" ]] && cp -f "$tmp/channel/tree/VERSION" "$tmp/VERSION" || true
         ok "Package received from the public GitHub release."
       fi
     else
-      warn "Update server is disabled, unreachable, or rejected the package."
+      warn "Public release was not downloaded. A verified local package can still be applied."
+    fi
+  fi
+  # درخت سورسی که install.sh همین الان از بستهٔ بررسی‌شده باز کرده، اگر از نصب فعلی جدیدتر است.
+  if [[ "$prepared_mode" -eq 0 && -z "$src_patch" && -f "${SCRIPT_DIR}/patch/botapi.php" && -f "${SCRIPT_DIR}/VERSION" && "${SCRIPT_DIR}" != "$INSTALL_DIR" ]]; then
+    local srcv
+    srcv="$(version_of "$SCRIPT_DIR")"
+    if [[ "$srcv" != "unknown" && "$srcv" != "$current" ]] && [[ "$(printf '%s\n%s\n' "$current" "$srcv" | sort -V | tail -1)" == "$srcv" ]]; then
+      src_patch="${SCRIPT_DIR}/patch"
+      cp -f "${SCRIPT_DIR}/VERSION" "$tmp/VERSION" || true
+      info "Using the verified source tree ${SCRIPT_DIR} (v${srcv})."
     fi
   fi
 

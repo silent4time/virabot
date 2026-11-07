@@ -589,7 +589,12 @@ function vb_update_cli(array $argv): void
     $cmd = $argv[1] ?? '';
     $root = __DIR__;
     if ($cmd === 'fetch-into') {
-        exit(vb_update_materialize($root, $argv[2] ?? '', time(), null));
+        $dest = $argv[2] ?? '';
+        $root = $argv[3] ?? __DIR__;
+        if (!is_dir($root)) {
+            exit(1);
+        }
+        exit(vb_update_materialize($root, $dest, time(), null));
     }
     if ($cmd === 'fetch-job') {
         $dest = '';
