@@ -2881,7 +2881,7 @@ elseif ($datain == "systemsms") {
     $__q36->execute();
     $info_product = $__q36->fetch(PDO::FETCH_ASSOC);
     $count_invoice = select("invoice", "*", "name_product", $info_product['name_product'], "count");
-    $infoproduct = sprintf($textbotlang['Admin']['adminphp']['msg_user_price_volume'], $info_product['name_product'], $info_product['price_product'], $info_product['Volume_constraint'], $info_product['Location'], $info_product['Service_time'], $info_product['agent'], $info_product['data_limit_reset'], $info_product['note'], $info_product['category'], $count_invoice);
+    $infoproduct = sprintf($textbotlang['Admin']['adminphp']['msg_user_price_volume'], $info_product['name_product'], htmlspecialchars((string) ($info_product['code_product'] ?? ''), ENT_QUOTES, 'UTF-8'), $info_product['price_product'], $info_product['Volume_constraint'], $info_product['Location'], $info_product['Service_time'], $info_product['agent'], $info_product['data_limit_reset'], $info_product['note'], $info_product['category'], $count_invoice);
     sendmessage($from_id, $infoproduct, $change_product, 'HTML');
     step('home', $from_id);
 } elseif ($text == $textbotlang['keyboard']['price'] && $adminrulecheck['rule'] == "administrator") {

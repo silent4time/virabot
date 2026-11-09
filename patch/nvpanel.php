@@ -524,17 +524,131 @@ function nvpanel_may_map_product(array $product, array $panel): bool
     return $loc === (string) ($panel['name_panel'] ?? '');
 }
 
+function nvpanel_is_nav_text(string $text): bool
+{
+    global $textbotlang;
+    $t = trim($text);
+    if ($t === '') {
+        return false;
+    }
+    $exact = [
+        (string) ($textbotlang['Admin']['backAdminBtn'] ?? ''),
+        (string) ($textbotlang['Admin']['backMenuBtn'] ?? ''),
+        (string) ($textbotlang['users']['backbtn'] ?? ''),
+        (string) ($textbotlang['Admin']['panelAdmin'] ?? ''),
+        '🏠 بازگشت به منوی مدیریت',
+        '▶️ بازگشت به منوی قبل',
+        '◀️ بازگشت به منوی مدیریت',
+        'panel',
+        '/panel',
+        '/cancel',
+    ];
+    if (in_array($t, array_filter($exact, 'strlen'), true)) {
+        return true;
+    }
+    // Same labels with or without a leading emoji.
+    $core = trim((string) preg_replace('/^[^\p{L}\p{N}\/]+/u', '', $t));
+    return in_array($core, [
+        'بازگشت به منوی قبل',
+        'بازگشت به منوی اصلی',
+        'بازگشت به منوی مدیریت',
+        'بازگشت',
+        'لغو',
+        'انصراف',
+    ], true);
+}
+
+function nvpanel_is_panel_action_text(string $text): bool
+{
+    global $textbotlang;
+    $t = trim($text);
+    if ($t === '') {
+        return false;
+    }
+    $labels = [
+        (string) ($textbotlang['keyboard']['panelFeatureStatus'] ?? ''),
+        (string) ($textbotlang['keyboard']['panelName'] ?? ''),
+        (string) ($textbotlang['keyboard']['deletePanel'] ?? ''),
+        (string) ($textbotlang['keyboard']['editPanelUrl'] ?? ''),
+        '🔑 ویرایش کلید API',
+        '🗂 دسته پیش‌فرض پنل',
+    ];
+    if (function_exists('virabot_cat_btn_defcat')) {
+        $labels[] = (string) virabot_cat_btn_defcat();
+    }
+    return in_array($t, array_filter($labels, 'strlen'), true);
+}
+
+/** The NV Panel row the admin is working on: the selected panel, else the only nvpanel row. */
+function nvpanel_admin_panel(PDO $pdo, string $selected): array
+{
+    try {
+        if ($selected !== '') {
+            $st = $pdo->prepare('SELECT name_panel, type, status FROM marzban_panel WHERE name_panel = ? LIMIT 1');
+            $st->execute([$selected]);
+            $row = $st->fetch(PDO::FETCH_ASSOC) ?: [];
+            if (($row['type'] ?? '') === 'nvpanel') {
+                return $row + ['_selected' => true];
+            }
+        }
+        $st = $pdo->query("SELECT name_panel, type, status FROM marzban_panel WHERE type = 'nvpanel' LIMIT 2");
+        $rows = $st ? $st->fetchAll(PDO::FETCH_ASSOC) : [];
+        if (count($rows) === 1) {
+            return $rows[0] + ['_selected' => false];
+        }
+    } catch (Throwable $e) {
+    }
+    return [];
+}
+
+function nvpanel_product_map_prompt(?PDO $pdo, array $panel): string
+{
+    $lines = [
+        'کد محصول ویرابات و شناسه محصول درگاه را با یک فاصله بفرستید.',
+        'مثال:',
+        '<code>c716 19</code>',
+        'شناسه را خودتان از درگاه می‌آورید. عدد پیش‌فرضی استفاده نمی‌شود.',
+    ];
+    $name = (string) ($panel['name_panel'] ?? '');
+    if ($pdo instanceof PDO && $name !== '') {
+        try {
+            $st = $pdo->prepare('SELECT code_product, name_product, nv_product_id FROM product WHERE Location = ? ORDER BY name_product LIMIT 40');
+            $st->execute([$name]);
+            $rows = $st->fetchAll(PDO::FETCH_ASSOC);
+            $lines[] = '';
+            $lines[] = 'محصولات پنل «' . htmlspecialchars($name, ENT_QUOTES, 'UTF-8') . '»:';
+            if (!$rows) {
+                $lines[] = 'محصولی برای این پنل ثبت نشده است.';
+            }
+            foreach ($rows as $r) {
+                $id = trim((string) ($r['nv_product_id'] ?? ''));
+                $lines[] = '• <code>' . htmlspecialchars((string) $r['code_product'], ENT_QUOTES, 'UTF-8') . '</code> — '
+                    . htmlspecialchars((string) ($r['name_product'] ?? ''), ENT_QUOTES, 'UTF-8')
+                    . ' — شناسه درگاه: ' . ($id === '' ? 'ثبت‌نشده' : '<code>' . htmlspecialchars($id, ENT_QUOTES, 'UTF-8') . '</code>');
+            }
+        } catch (Throwable $e) {
+        }
+    }
+    $lines[] = '';
+    $lines[] = 'برای لغو، دکمه بازگشت را بزنید.';
+    return implode("\n", $lines);
+}
+
 function nvpanel_admin_handle(): bool
 {
     if (!function_exists('sendmessage')) {
         return false;
     }
-    global $text, $from_id, $adminrulecheck, $user, $pdo;
+    global $text, $from_id, $adminrulecheck, $user, $pdo, $option_nvpanel, $keyboardadmin;
     if (($adminrulecheck['rule'] ?? '') !== 'administrator') {
         return false;
     }
+    $hasPdo = isset($pdo) && $pdo instanceof PDO;
+    $selected = (string) ($user['Processing_value'] ?? '');
+    $menu = isset($option_nvpanel) && is_string($option_nvpanel) ? $option_nvpanel : null;
     if (($text ?? '') === 'شناسه محصول nvpanel') {
-        sendmessage($from_id, "کد محصول ویرابات و شناسه محصول درگاه را بفرستید.\nمثال:\n<code>MYCODE PROD</code>\nشناسه را خودتان از درگاه می‌آورید. عدد پیش‌فرضی استفاده نمی‌شود.", null, 'HTML');
+        $panel = $hasPdo ? nvpanel_admin_panel($pdo, $selected) : [];
+        sendmessage($from_id, nvpanel_product_map_prompt($hasPdo ? $pdo : null, $panel), $menu, 'HTML');
         if (function_exists('step')) {
             step('nvpanel_product_map', $from_id);
         }
@@ -543,30 +657,47 @@ function nvpanel_admin_handle(): bool
     if (($user['step'] ?? '') !== 'nvpanel_product_map') {
         return false;
     }
-    if (!preg_match('/^(\S+)\s+([A-Za-z0-9_-]{1,32})$/u', trim((string) $text), $m) || !isset($pdo) || !$pdo instanceof PDO) {
-        sendmessage($from_id, 'قالب نامعتبر است. مثال: MYCODE PROD', null, 'HTML');
+    $input = trim((string) ($text ?? ''));
+    if (nvpanel_is_nav_text($input) || nvpanel_is_panel_action_text($input)) {
+        if (function_exists('step')) {
+            step('home', $from_id);
+        }
+        $user['step'] = 'home';
+        if (nvpanel_is_panel_action_text($input)) {
+            // Let admin.php handle the other NV Panel menu button in this same request.
+            return false;
+        }
+        $panel = $hasPdo ? nvpanel_admin_panel($pdo, $selected) : [];
+        $toAdmin = in_array(trim((string) preg_replace('/^[^\p{L}\p{N}\/]+/u', '', $input)), ['بازگشت به منوی مدیریت', 'بازگشت به منوی اصلی', 'panel', '/panel'], true);
+        $kb = (!$toAdmin && !empty($panel['_selected']) && $menu !== null) ? $menu : ($keyboardadmin ?? $menu);
+        sendmessage($from_id, 'ثبت شناسه محصول لغو شد.', $kb, 'HTML');
+        return true;
+    }
+    if (!preg_match('/^(\S+)\s+([A-Za-z0-9_-]{1,32})$/u', $input, $m) || !$hasPdo) {
+        sendmessage($from_id, "قالب نامعتبر است. مثال: <code>c716 19</code>\nبرای لغو، دکمه بازگشت را بزنید.", $menu, 'HTML');
         return true;
     }
     $st = $pdo->prepare('SELECT code_product, Location FROM product WHERE code_product = ?');
     $st->execute([$m[1]]);
     $rows = $st->fetchAll(PDO::FETCH_ASSOC);
     if (count($rows) !== 1) {
-        sendmessage($from_id, 'این کد باید دقیقاً یک محصول متعلق به همین پنل nvpanel باشد.', null, 'HTML');
+        sendmessage($from_id, 'این کد باید دقیقاً یک محصول متعلق به همین پنل nvpanel باشد.', $menu, 'HTML');
         return true;
     }
     $panel = $pdo->prepare('SELECT name_panel, type, status FROM marzban_panel WHERE name_panel = ? LIMIT 1');
     $panel->execute([$rows[0]['Location']]);
     $panelRow = $panel->fetch(PDO::FETCH_ASSOC) ?: [];
     if (!nvpanel_may_map_product($rows[0], $panelRow)) {
-        sendmessage($from_id, 'فقط محصولی که از قبل مال همین پنل nvpanel است تغییر می‌کند. محصول پنل‌های دیگر دست نمی‌خورد.', null, 'HTML');
+        sendmessage($from_id, 'فقط محصولی که از قبل مال همین پنل nvpanel است تغییر می‌کند. محصول پنل‌های دیگر دست نمی‌خورد.', $menu, 'HTML');
         return true;
     }
     $upd = $pdo->prepare('UPDATE product SET nv_product_id = ? WHERE code_product = ? AND Location = ?');
     $upd->execute([$m[2], $m[1], $rows[0]['Location']]);
-    sendmessage($from_id, $upd->rowCount() > 0 ? 'شناسه محصول درگاه ذخیره شد.' : 'محصولی با این کد پیدا نشد.', null, 'HTML');
+    sendmessage($from_id, $upd->rowCount() > 0 ? 'شناسه محصول درگاه ذخیره شد.' : 'محصولی با این کد پیدا نشد.', $menu, 'HTML');
     if (function_exists('step')) {
         step('home', $from_id);
     }
+    $user['step'] = 'home';
     return true;
 }
 
