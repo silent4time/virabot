@@ -1514,6 +1514,7 @@ Rejection reason: %s
                         'msg_user_price_volume' => '
 📌 Information of the product being edited:
 Product name: %s
+Product code: <code>%s</code>
 Product price: %s
 Product volume: %s
 Product location: %s

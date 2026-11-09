@@ -67,7 +67,7 @@ function vb_update_fetch_release(string $root, int $now): array
     }
     $headers = [
         'Accept' => 'application/vnd.github+json',
-        'User-Agent' => 'VirabotUpdate/5.8.1',
+        'User-Agent' => 'VirabotUpdate/5.8.2',
         'X-GitHub-Api-Version' => '2022-11-28',
     ];
     $listUrl = 'https://api.github.com/repos/' . VB_UPDATE_REPO . '/releases?per_page=20';
@@ -127,7 +127,7 @@ function vb_update_download_asset(string $root, string $apiUrl, int $now): array
 {
     $headers = [
         'Accept' => 'application/octet-stream',
-        'User-Agent' => 'VirabotUpdate/5.8.1',
+        'User-Agent' => 'VirabotUpdate/5.8.2',
     ];
     $first = vb_update_http('GET', $apiUrl, $headers, 30, ['api.github.com']);
     vb_update_note_rate($root, $first['headers'] ?? [], $now);
@@ -140,7 +140,7 @@ function vb_update_download_asset(string $root, string $apiUrl, int $now): array
         $host = strtolower((string) parse_url($location, PHP_URL_HOST));
         $second = vb_update_http('GET', $location, [
             'Accept' => 'application/octet-stream',
-            'User-Agent' => 'VirabotUpdate/5.8.1',
+            'User-Agent' => 'VirabotUpdate/5.8.2',
         ], 180, [$host]);
         if ((int) ($second['status'] ?? 0) !== 200 || (string) ($second['body'] ?? '') === '') {
             return ['ok' => false, 'error' => 'download'];

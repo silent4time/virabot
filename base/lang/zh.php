@@ -1514,6 +1514,7 @@ f,n.n2',
                         'msg_user_price_volume' => '
 📌 正在编辑的产品信息：
 产品名称：%s
+产品代码：<code>%s</code>
 产品价格：%s
 产品流量：%s
 产品位置：%s
