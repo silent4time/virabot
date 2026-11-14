@@ -259,8 +259,25 @@ function nvpanel_request(array $panel, string $method, string $path, ?array $jso
     ];
 }
 
+function nvpanel_is_sqlite(PDO $pdo): bool
+{
+    try {
+        return $pdo->getAttribute(PDO::ATTR_DRIVER_NAME) === 'sqlite';
+    } catch (Throwable $e) {
+        return false;
+    }
+}
+
 function nvpanel_ensure(PDO $pdo): void
 {
+    if (nvpanel_is_sqlite($pdo)) {
+        // Offline tests only. Production is MySQL/MariaDB.
+        $pdo->exec("CREATE TABLE IF NOT EXISTS nvpanel_ops (
+            id INTEGER PRIMARY KEY AUTOINCREMENT, idem_key TEXT NOT NULL UNIQUE, panel_code TEXT NOT NULL, invoice_id TEXT NOT NULL,
+            customer_id TEXT NOT NULL, action TEXT NOT NULL, request_json TEXT NOT NULL, op_id INTEGER NULL, state TEXT NOT NULL,
+            refund_ok INTEGER NOT NULL DEFAULT 0, username TEXT NULL, secret_pass TEXT NULL, delivered INTEGER NOT NULL DEFAULT 0, updated_at INTEGER NOT NULL)");
+        return;
+    }
     $pdo->exec("CREATE TABLE IF NOT EXISTS nvpanel_ops (
         id INT AUTO_INCREMENT PRIMARY KEY,
         idem_key VARCHAR(128) NOT NULL UNIQUE,
@@ -292,6 +309,11 @@ function nvpanel_save(PDO $pdo, array $row): void
     $sql = 'INSERT INTO nvpanel_ops (idem_key,panel_code,invoice_id,customer_id,action,request_json,op_id,state,refund_ok,username,secret_pass,delivered,updated_at)
             VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
             ON DUPLICATE KEY UPDATE op_id=VALUES(op_id), state=VALUES(state), refund_ok=VALUES(refund_ok), username=VALUES(username), secret_pass=VALUES(secret_pass), delivered=VALUES(delivered), updated_at=VALUES(updated_at)';
+    if (nvpanel_is_sqlite($pdo)) {
+        $sql = 'INSERT INTO nvpanel_ops (idem_key,panel_code,invoice_id,customer_id,action,request_json,op_id,state,refund_ok,username,secret_pass,delivered,updated_at)
+            VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)
+            ON CONFLICT(idem_key) DO UPDATE SET op_id=excluded.op_id, state=excluded.state, refund_ok=excluded.refund_ok, username=excluded.username, secret_pass=excluded.secret_pass, delivered=excluded.delivered, updated_at=excluded.updated_at';
+    }
     $pdo->prepare($sql)->execute([
         $row['idem_key'], $row['panel_code'], $row['invoice_id'], $row['customer_id'], $row['action'], $row['request_json'],
         $row['op_id'], $row['state'], $row['refund_ok'], $row['username'], $row['secret_pass'], $row['delivered'], $row['updated_at'],
@@ -404,8 +426,9 @@ function nvpanel_purchase(array $panel, string $codeProduct, string $usernameHin
     if (!nvpanel_product_ok($productId)) {
         return ['status' => 'Unsuccessful', 'msg' => 'شناسه محصول درگاه برای این محصول تنظیم نشده است.'];
     }
-    $inv = $pdo->prepare('SELECT id_invoice, id_user FROM invoice WHERE username = ? ORDER BY id DESC LIMIT 1');
-    $inv->execute([$usernameHint]);
+    // The invoice table has no `id` column (primary key is id_invoice); newest sale first.
+    $inv = $pdo->prepare('SELECT id_invoice, id_user FROM invoice WHERE username = ? AND Service_location = ? ORDER BY time_sell DESC LIMIT 1');
+    $inv->execute([$usernameHint, (string) $panel['name_panel']]);
     $invoice = $inv->fetch(PDO::FETCH_ASSOC);
     if (!$invoice) {
         return ['status' => 'Unsuccessful', 'msg' => 'فاکتور این خرید پیدا نشد.'];
@@ -421,7 +444,9 @@ function nvpanel_purchase(array $panel, string $codeProduct, string $usernameHin
         'action' => 'create',
     ]);
     if (!empty($out['_nvpanel'])) {
-        $pdo->prepare('UPDATE invoice SET username = ? WHERE id_invoice = ?')->execute([$out['username'], $invoice['id_invoice']]);
+        // The gateway picks the username, so callers that later mark the invoice active by the old
+        // username would miss it. Activate it here, by id, together with the real username.
+        $pdo->prepare("UPDATE invoice SET username = ?, Status = 'active' WHERE id_invoice = ?")->execute([$out['username'], $invoice['id_invoice']]);
         $pdo->prepare('UPDATE nvpanel_ops SET delivered = 1 WHERE idem_key = ?')->execute([$body['ref_id']]);
     }
     return $out;
