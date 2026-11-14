@@ -4360,6 +4360,12 @@ if ($user['step'] == "createusertest" || $user['step'] == "createusertest_cx" ||
             error_log('eylan index: ' . $e->getMessage());
             sendmessage($from_id, $textcreatuser, $Shoppinginfo, 'HTML');
         }
+    } elseif (($marzban_list_get['type'] ?? '') === 'nvpanel' || !empty($dataoutput['_nvpanel'])) {
+        // 5.8.4: wallet purchase now delivers the NV Panel password too (same text as the paid flow).
+        $msg = function_exists('nvpanel_message')
+            ? nvpanel_message((string) $dataoutput['username'], (string) ($dataoutput['_nv_password'] ?? ''), 'فعال', null)
+            : $textcreatuser;
+        sendmessage($from_id, $msg, $Shoppinginfo, 'HTML');
     } else {
         sendMessageService($marzban_list_get, $dataoutput['configs'], $output_config_link, $dataoutput['username'], $Shoppinginfo, $textcreatuser, $randomString);
     }
