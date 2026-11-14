@@ -1143,7 +1143,7 @@ $optionManualsale = json_encode([
 
 $option_nvpanel = json_encode([
     'keyboard' => [
-        [['text' => 'شناسه محصول nvpanel']],
+        [['text' => '📋 محصولات درگاه nvpanel'], ['text' => 'شناسه محصول nvpanel']],
         [['text' => $textbotlang['keyboard']['panelFeatureStatus']]],
         [['text' => $textbotlang['keyboard']['panelName']], ['text' => $textbotlang['keyboard']['deletePanel']]],
         [['text' => '🔑 ویرایش کلید API'], ['text' => $textbotlang['keyboard']['editPanelUrl']]],
