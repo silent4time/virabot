@@ -1,6 +1,6 @@
 <?php
 /**
- * NV Panel gateway consumer, contract v1.3.1 (silent4time/nvpanel-gateway).
+ * NV Panel gateway consumer, contract v1.3.1; read-only catalog GET /products from v1.3.5 (silent4time/nvpanel-gateway).
  * The bearer token is the gateway consumer token, not a GitHub token.
  * Live base URL is not baked in. Empty panel URL or token stays disabled.
  */
@@ -572,6 +572,7 @@ function nvpanel_is_panel_action_text(string $text): bool
         (string) ($textbotlang['keyboard']['editPanelUrl'] ?? ''),
         '🔑 ویرایش کلید API',
         '🗂 دسته پیش‌فرض پنل',
+        NV_CATALOG_BTN,
     ];
     if (function_exists('virabot_cat_btn_defcat')) {
         $labels[] = (string) virabot_cat_btn_defcat();
@@ -634,18 +635,329 @@ function nvpanel_product_map_prompt(?PDO $pdo, array $panel): string
     return implode("\n", $lines);
 }
 
+/* ---------------------------------------------------------------- 5.8.3 catalog --- */
+
+const NV_CATALOG_BTN = '📋 محصولات درگاه nvpanel';
+
+/** Full marzban_panel row (url + token) for the admin's NV Panel, or []. */
+function nvpanel_admin_full_panel(PDO $pdo, string $selected): array
+{
+    $p = nvpanel_admin_panel($pdo, $selected);
+    if ($p === []) {
+        return [];
+    }
+    try {
+        $st = $pdo->prepare('SELECT * FROM marzban_panel WHERE name_panel = ? AND type = ? LIMIT 1');
+        $st->execute([(string) $p['name_panel'], 'nvpanel']);
+        $row = $st->fetch(PDO::FETCH_ASSOC);
+        return is_array($row) ? $row + ['_selected' => !empty($p['_selected'])] : [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+/**
+ * Read-only gateway catalog: GET /products?category=4 (nvpanel-gateway >= 1.3.5).
+ * Works while the panel is disabled (no money moves). Never opens configure/checkout.
+ * @return array{ok:bool,code:string,products:array,stale:bool,msg:string}
+ */
+function nvpanel_catalog(array $panel, int $timeout = 20): array
+{
+    $fail = static function (string $code, string $msg): array {
+        return ['ok' => false, 'code' => $code, 'products' => [], 'stale' => false, 'msg' => $msg];
+    };
+    if (!nvpanel_configured($panel)) {
+        return $fail('not_configured', 'نشانی یا توکن پنل nvpanel تنظیم نشده است.');
+    }
+    $res = nvpanel_request($panel, 'GET', '/products?category=4', null, $timeout);
+    $http = (int) $res['status'];
+    $body = is_array($res['json']) ? $res['json'] : [];
+    $code = (string) ($body['code'] ?? '');
+    if ($http === 0) {
+        return $fail('timeout', 'درگاه nvpanel پاسخ نداد (قطع ارتباط یا پایان مهلت). کمی بعد دوباره امتحان کنید.');
+    }
+    if ($http === 401) {
+        return $fail('unauthorized', 'درگاه توکن این پنل را نپذیرفت.');
+    }
+    if ($http === 404 || $http === 405) {
+        return $fail('unsupported', 'این نسخهٔ درگاه فهرست محصول ندارد؛ درگاه باید ۱٫۳٫۵ یا بالاتر باشد.');
+    }
+    if ($http !== 200 || $body === []) {
+        return $fail($code !== '' ? $code : 'http_' . $http, 'پاسخ نامعتبر از درگاه (HTTP ' . $http . ').');
+    }
+    $messages = [
+        'catalog_session_required' => 'نشست پنل در درگاه خارج شده است؛ مدیر درگاه باید دوباره وارد پنل شود.',
+        'catalog_unparseable' => 'صفحهٔ محصولات پنل خوانده نشد (قالب صفحه عوض شده است).',
+        'category_not_verified' => 'این دسته در درگاه تأیید نشده است.',
+        'panel_unreachable' => 'درگاه به پنل nvpanel دسترسی ندارد.',
+        'panel_unavailable' => 'پنل nvpanel در دسترس نیست.',
+        'catalog_upstream_error' => 'خواندن صفحهٔ محصولات از پنل ناموفق بود.',
+    ];
+    if (empty($body['ok']) || ($body['available'] ?? true) === false || !in_array($code, ['ok', 'catalog_empty', ''], true)) {
+        if ($code === 'catalog_empty') {
+            return ['ok' => true, 'code' => 'catalog_empty', 'products' => [], 'stale' => false, 'msg' => ''];
+        }
+        return $fail($code !== '' ? $code : 'error', $messages[$code] ?? ('خواندن فهرست محصولات ناموفق بود (کد: ' . $code . ').'));
+    }
+    $out = [];
+    foreach ((array) ($body['products'] ?? []) as $p) {
+        if (!is_array($p)) {
+            continue;
+        }
+        $id = trim((string) ($p['id'] ?? ''));
+        if (!nvpanel_product_ok($id) || isset($out[$id])) {
+            continue;
+        }
+        $w = $p['wholesale'] ?? null;
+        $wv = is_array($w) ? ($w['value'] ?? null) : null;
+        $wholesale = (is_int($wv) || (is_string($wv) && ctype_digit($wv)) || (is_float($wv) && $wv >= 0)) ? (int) $wv : null;
+        $dur = is_array($p['duration'] ?? null) ? (string) ($p['duration']['raw'] ?? '') : '';
+        $name = trim(preg_replace('/\s+/u', ' ', (string) ($p['name'] ?? '')));
+        $out[$id] = [
+            'id' => $id,
+            'name' => mb_substr($name, 0, 120),
+            'wholesale' => $wholesale,
+            'duration' => mb_substr($dur, 0, 40),
+        ];
+    }
+    $stale = is_array($body['cache'] ?? null) && !empty($body['cache']['stale']);
+    return ['ok' => true, 'code' => $code === '' ? 'ok' : $code, 'products' => array_values($out), 'stale' => $stale, 'msg' => ''];
+}
+
+function nvpanel_toman($n): string
+{
+    return number_format((int) $n) . ' تومان';
+}
+
+/** Warning text when the bot selling price is below the gateway wholesale price, else ''. */
+function nvpanel_price_warning($price, ?int $wholesale): string
+{
+    if ($wholesale === null || !is_numeric((string) $price)) {
+        return '';
+    }
+    $price = (int) $price;
+    if ($price >= $wholesale) {
+        return '';
+    }
+    return '⚠️ قیمت فروش ربات (' . nvpanel_toman($price) . ') از قیمت عمدهٔ درگاه (' . nvpanel_toman($wholesale) . ') کمتر است؛ هر فروش ' . nvpanel_toman($wholesale - $price) . ' زیان دارد.';
+}
+
+function nvpanel_bot_products(PDO $pdo, string $panelName): array
+{
+    try {
+        $st = $pdo->prepare('SELECT id, code_product, name_product, price_product, Location, nv_product_id FROM product WHERE Location = ? ORDER BY name_product LIMIT 40');
+        $st->execute([$panelName]);
+        return $st->fetchAll(PDO::FETCH_ASSOC) ?: [];
+    } catch (Throwable $e) {
+        return [];
+    }
+}
+
+function nvpanel_h(string $s): string
+{
+    return htmlspecialchars($s, ENT_QUOTES, 'UTF-8');
+}
+
+/** @return array{text:string,kb:?string} */
+function nvpanel_catalog_screen(PDO $pdo, array $panel, ?array $cat = null): array
+{
+    $cat = $cat ?? nvpanel_catalog($panel);
+    if (!$cat['ok']) {
+        return ['text' => "📋 محصولات درگاه nvpanel\n\n⛔️ " . nvpanel_h($cat['msg']) . "\nنگاشت دستی با «شناسه محصول nvpanel» همچنان کار می‌کند.", 'kb' => json_encode(['inline_keyboard' => [[['text' => '🔄 تلاش دوباره', 'callback_data' => 'nvcat_r']]]], JSON_UNESCAPED_UNICODE)];
+    }
+    $mine = nvpanel_bot_products($pdo, (string) $panel['name_panel']);
+    $lines = ['📋 محصولات درگاه nvpanel (دستهٔ ۴)', ''];
+    if ($cat['stale']) {
+        $lines[] = '⚠️ تازه‌سازی در درگاه ناموفق بود؛ این فهرست آخرین نسخهٔ ذخیره‌شده است.';
+        $lines[] = '';
+    }
+    if ($cat['products'] === []) {
+        $lines[] = 'درگاه محصولی در این دسته نشان نداد.';
+    }
+    $rows = [];
+    foreach ($cat['products'] as $p) {
+        $lines[] = '🔹 شناسه <code>' . nvpanel_h($p['id']) . '</code> — ' . nvpanel_h($p['name']);
+        $lines[] = '   قیمت عمده: ' . ($p['wholesale'] === null ? 'نامعلوم' : nvpanel_toman($p['wholesale'])) . ($p['duration'] !== '' ? ' — مدت: ' . nvpanel_h($p['duration']) : '');
+        foreach ($mine as $m) {
+            if (trim((string) $m['nv_product_id']) === $p['id']) {
+                $lines[] = '   ↔️ وصل به <code>' . nvpanel_h((string) $m['code_product']) . '</code> (فروش ' . nvpanel_toman($m['price_product']) . ')';
+                $warn = nvpanel_price_warning($m['price_product'], $p['wholesale']);
+                if ($warn !== '') {
+                    $lines[] = '   ' . $warn;
+                }
+            }
+        }
+        $rows[] = [['text' => '✅ انتخاب ' . $p['id'] . ' — ' . mb_substr($p['name'], 0, 30), 'callback_data' => 'nvcat_p_' . $p['id']]];
+    }
+    $ids = array_column($cat['products'], 'id');
+    foreach ($mine as $m) {
+        $id = trim((string) $m['nv_product_id']);
+        if ($id !== '' && !in_array($id, $ids, true)) {
+            $lines[] = '⚠️ محصول <code>' . nvpanel_h((string) $m['code_product']) . '</code> به شناسهٔ <code>' . nvpanel_h($id) . '</code> وصل است که در فهرست درگاه نیست.';
+        }
+    }
+    $lines[] = '';
+    $lines[] = 'حجم و تعداد اتصال در فهرست درگاه نیست و مدت از عنوان محصول است. قیمت فروش را خودتان تعیین کنید.';
+    $lines[] = 'برای وصل‌کردن، یک محصول درگاه را انتخاب کنید.';
+    $rows[] = [['text' => '🔄 تازه‌سازی', 'callback_data' => 'nvcat_r']];
+    return ['text' => implode("\n", $lines), 'kb' => json_encode(['inline_keyboard' => $rows], JSON_UNESCAPED_UNICODE)];
+}
+
+function nvpanel_catalog_find(array $cat, string $id): ?array
+{
+    foreach ($cat['products'] as $p) {
+        if ($p['id'] === $id) {
+            return $p;
+        }
+    }
+    return null;
+}
+
+function nvpanel_answer_cb(string $t = ''): void
+{
+    global $callback_query_id;
+    if (empty($callback_query_id) || !function_exists('telegram')) {
+        return;
+    }
+    $d = ['callback_query_id' => $callback_query_id];
+    if ($t !== '') {
+        $d['text'] = $t;
+    }
+    telegram('answerCallbackQuery', $d);
+}
+
+/** Inline callbacks nvcat_*: refresh, pick gateway product, map to a bot product. */
+function nvpanel_catalog_callback(PDO $pdo, string $data, string $selected, $from_id, ?string $menu): bool
+{
+    if (!preg_match('/^nvcat_(r|p_([A-Za-z0-9_-]{1,32})|m_([A-Za-z0-9_-]{1,32})_(\d{1,10}))$/', $data, $m)) {
+        return false;
+    }
+    nvpanel_answer_cb();
+    $panel = nvpanel_admin_full_panel($pdo, $selected);
+    if ($panel === []) {
+        sendmessage($from_id, 'پنل nvpanel پیدا نشد. اول پنل را از «مدیریت پنل» انتخاب کنید.', $menu, 'HTML');
+        return true;
+    }
+    if ($m[1] === 'r') {
+        $s = nvpanel_catalog_screen($pdo, $panel);
+        sendmessage($from_id, $s['text'], $s['kb'], 'HTML');
+        return true;
+    }
+    $cat = nvpanel_catalog($panel);
+    if (!$cat['ok']) {
+        sendmessage($from_id, '⛔️ ' . nvpanel_h($cat['msg']) . "\nبدون فهرست تازهٔ درگاه چیزی ذخیره نشد.", $menu, 'HTML');
+        return true;
+    }
+    $nvid = ($m[2] ?? '') !== '' ? $m[2] : $m[3];
+    $gp = nvpanel_catalog_find($cat, $nvid);
+    if ($gp === null) {
+        sendmessage($from_id, 'این شناسه دیگر در فهرست درگاه نیست. فهرست را تازه کنید.', $menu, 'HTML');
+        return true;
+    }
+    $mine = nvpanel_bot_products($pdo, (string) $panel['name_panel']);
+    if (($m[2] ?? '') !== '') {
+        $lines = [
+            'محصول درگاه: <code>' . nvpanel_h($gp['id']) . '</code> — ' . nvpanel_h($gp['name']),
+            'قیمت عمده: ' . ($gp['wholesale'] === null ? 'نامعلوم' : nvpanel_toman($gp['wholesale'])),
+            '',
+        ];
+        if ($mine === []) {
+            $lines[] = 'هنوز محصولی برای پنل «' . nvpanel_h((string) $panel['name_panel']) . '» در ربات نساخته‌اید. اول محصول را بسازید.';
+            sendmessage($from_id, implode("\n", $lines), $menu, 'HTML');
+            return true;
+        }
+        $lines[] = 'کدام محصول ربات به این شناسه وصل شود؟';
+        $rows = [];
+        foreach ($mine as $b) {
+            $warn = nvpanel_price_warning($b['price_product'], $gp['wholesale']);
+            $cur = trim((string) $b['nv_product_id']);
+            $lines[] = '• <code>' . nvpanel_h((string) $b['code_product']) . '</code> — ' . nvpanel_h((string) $b['name_product'])
+                . ' — فروش ' . nvpanel_toman($b['price_product']) . ' — شناسهٔ فعلی: ' . ($cur === '' ? 'ثبت‌نشده' : nvpanel_h($cur))
+                . ($warn !== '' ? "\n  " . $warn : '');
+            $rows[] = [['text' => ($warn !== '' ? '⚠️ ' : '') . (string) $b['code_product'] . ' — ' . mb_substr((string) $b['name_product'], 0, 28), 'callback_data' => 'nvcat_m_' . $gp['id'] . '_' . (int) $b['id']]];
+        }
+        $rows[] = [['text' => '🔙 فهرست درگاه', 'callback_data' => 'nvcat_r']];
+        sendmessage($from_id, implode("\n", $lines), json_encode(['inline_keyboard' => $rows], JSON_UNESCAPED_UNICODE), 'HTML');
+        return true;
+    }
+    $row = null;
+    foreach ($mine as $b) {
+        if ((int) $b['id'] === (int) $m[4]) {
+            $row = $b;
+        }
+    }
+    if ($row === null || !nvpanel_may_map_product($row, $panel)) {
+        sendmessage($from_id, 'فقط محصولی که مال همین پنل nvpanel است وصل می‌شود.', $menu, 'HTML');
+        return true;
+    }
+    $upd = $pdo->prepare('UPDATE product SET nv_product_id = ? WHERE id = ? AND Location = ?');
+    $upd->execute([$gp['id'], (int) $row['id'], (string) $panel['name_panel']]);
+    $old = trim((string) $row['nv_product_id']);
+    $msg = '✅ محصول <code>' . nvpanel_h((string) $row['code_product']) . '</code> به شناسهٔ <code>' . nvpanel_h($gp['id']) . '</code> درگاه (' . nvpanel_h($gp['name']) . ') وصل شد.'
+        . ($old !== '' && $old !== $gp['id'] ? "\nشناسهٔ قبلی: <code>" . nvpanel_h($old) . '</code>' : '');
+    $warn = nvpanel_price_warning($row['price_product'], $gp['wholesale']);
+    if ($warn !== '') {
+        $msg .= "\n\n" . $warn . "\nقیمت محصول را از «مدیریت محصول» اصلاح کنید.";
+    }
+    sendmessage($from_id, $msg, $menu, 'HTML');
+    return true;
+}
+
+/** After a manual «c716 19» mapping: best-effort catalog check, '' when nothing to add. */
+function nvpanel_manual_map_note(PDO $pdo, string $panelName, string $code, string $nvid): string
+{
+    try {
+        $st = $pdo->prepare('SELECT * FROM marzban_panel WHERE name_panel = ? AND type = ? LIMIT 1');
+        $st->execute([$panelName, 'nvpanel']);
+        $panel = $st->fetch(PDO::FETCH_ASSOC);
+        if (!is_array($panel) || !nvpanel_configured($panel)) {
+            return '';
+        }
+        $cat = nvpanel_catalog($panel, 12);
+        if (!$cat['ok']) {
+            return '';
+        }
+        $gp = nvpanel_catalog_find($cat, $nvid);
+        if ($gp === null) {
+            return '⚠️ شناسهٔ <code>' . nvpanel_h($nvid) . '</code> در فهرست فعلی درگاه نیست.';
+        }
+        $p = $pdo->prepare('SELECT price_product FROM product WHERE code_product = ? AND Location = ? LIMIT 1');
+        $p->execute([$code, $panelName]);
+        return nvpanel_price_warning($p->fetchColumn(), $gp['wholesale']);
+    } catch (Throwable $e) {
+        return '';
+    }
+}
+
 function nvpanel_admin_handle(): bool
 {
     if (!function_exists('sendmessage')) {
         return false;
     }
-    global $text, $from_id, $adminrulecheck, $user, $pdo, $option_nvpanel, $keyboardadmin;
+    global $text, $from_id, $adminrulecheck, $user, $pdo, $option_nvpanel, $keyboardadmin, $datain;
     if (($adminrulecheck['rule'] ?? '') !== 'administrator') {
         return false;
     }
     $hasPdo = isset($pdo) && $pdo instanceof PDO;
     $selected = (string) ($user['Processing_value'] ?? '');
     $menu = isset($option_nvpanel) && is_string($option_nvpanel) ? $option_nvpanel : null;
+    $data = (string) ($datain ?? '');
+    if ($hasPdo && str_starts_with($data, 'nvcat_')) {
+        return nvpanel_catalog_callback($pdo, $data, $selected, $from_id, $menu);
+    }
+    if (($text ?? '') === NV_CATALOG_BTN) {
+        if (($user['step'] ?? '') === 'nvpanel_product_map' && function_exists('step')) {
+            step('home', $from_id);
+        }
+        $panel = $hasPdo ? nvpanel_admin_full_panel($pdo, $selected) : [];
+        if ($panel === []) {
+            sendmessage($from_id, 'پنل nvpanel پیدا نشد. اول پنل را از «مدیریت پنل» انتخاب کنید.', $menu, 'HTML');
+            return true;
+        }
+        $s = nvpanel_catalog_screen($pdo, $panel);
+        sendmessage($from_id, $s['text'], $s['kb'], 'HTML');
+        return true;
+    }
     if (($text ?? '') === 'شناسه محصول nvpanel') {
         $panel = $hasPdo ? nvpanel_admin_panel($pdo, $selected) : [];
         sendmessage($from_id, nvpanel_product_map_prompt($hasPdo ? $pdo : null, $panel), $menu, 'HTML');
@@ -693,7 +1005,9 @@ function nvpanel_admin_handle(): bool
     }
     $upd = $pdo->prepare('UPDATE product SET nv_product_id = ? WHERE code_product = ? AND Location = ?');
     $upd->execute([$m[2], $m[1], $rows[0]['Location']]);
-    sendmessage($from_id, $upd->rowCount() > 0 ? 'شناسه محصول درگاه ذخیره شد.' : 'محصولی با این کد پیدا نشد.', $menu, 'HTML');
+    $saved = $upd->rowCount() > 0;
+    $note = $saved ? nvpanel_manual_map_note($pdo, (string) $rows[0]['Location'], (string) $m[1], (string) $m[2]) : '';
+    sendmessage($from_id, ($saved ? 'شناسه محصول درگاه ذخیره شد.' : 'محصولی با این کد پیدا نشد.') . ($note !== '' ? "\n" . $note : ''), $menu, 'HTML');
     if (function_exists('step')) {
         step('home', $from_id);
     }
