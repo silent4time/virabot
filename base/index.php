@@ -4650,7 +4650,7 @@ if ($user['step'] == "createusertest" || preg_match('/locationtest_(.*)/', $data
     step('get_step_payment', $from_id);
 } elseif ($user['step'] == "get_step_payment") {
     if ($datain == "cart_to_offline") {
-        $checkpay = $pdo->prepare("SELECT * FROM Payment_report WHERE id = :user_id AND payment_Status = 'Unpaid'");
+        $checkpay = $pdo->prepare("SELECT * FROM Payment_report WHERE id_user = :user_id AND payment_Status = 'Unpaid'");
         $checkpay->bindValue(':user_id', $from_id, PDO::PARAM_STR);
         $checkpay->execute();
         if (($checkpay)->rowCount() != 0) {
@@ -4692,7 +4692,7 @@ if ($user['step'] == "createusertest" || preg_match('/locationtest_(.*)/', $data
             '{card_number}' => $card_number,
             '{name_card}' => $PaySettingname,
         ];
-        $price_copy = intval($user['Processing_value'] . "0");
+        $price_copy = (string) (int) round((float) $user['Processing_value']);
         $textcart = strtr($textbotlang['textbot']['cart'], $replacements);
         $invoice = "{$user['Processing_value_tow']}|{$user['Processing_value_one']}";
         $dateacc = date('Y/m/d H:i:s');

@@ -5005,6 +5005,15 @@ if ($user['step'] == "createusertest" || $user['step'] == "createusertest_cx" ||
             sendmessage($from_id, "❌ حداکثر مبلغ کارت‌به‌کارت {$maxbalance_fmt} تومان است.", null, 'HTML');
             return;
         }
+        // رسید کارت‌به‌کارت همین کاربر با همین مبلغ هنوز بررسی نشده: فاکتور تکراری نساز تا دوبار پرداخت نشود
+        if (function_exists('vb_cardpay_find_pending')) {
+            $pendingCard = vb_cardpay_find_pending($pdo, $from_id, $user['Processing_value'], time(), function_exists('getBotTimezone') ? (string) getBotTimezone() : 'Asia/Tehran');
+            if (!empty($pendingCard['waiting_same'])) {
+                $w = $pendingCard['waiting_same'][0];
+                sendmessage($from_id, "⏳ رسید قبلی شما با همین مبلغ (" . number_format((float) $w['price']) . " تومان، کد <code>" . htmlspecialchars((string) $w['id_order']) . "</code>) هنوز در انتظار بررسی است.\nبرای جلوگیری از پرداخت تکراری، دوباره واریز نکنید و منتظر تأیید بمانید یا با پشتیبانی تماس بگیرید.", null, 'HTML');
+                return;
+            }
+        }
         $cardQuery = $pdo->prepare("SELECT * FROM card_number  ORDER BY RAND() LIMIT 1");
         $cardQuery->execute();
         if ($cardQuery === false) {
@@ -5032,7 +5041,8 @@ if ($user['step'] == "createusertest" || $user['step'] == "createusertest_cx" ||
             '{card_number}' => $card_number,
             '{name_card}' => $PaySettingname,
         ];
-        $price_copy = intval($user['Processing_value'] . "0");
+        // مبلغ کپی‌شده باید دقیقاً همان عدد تومانی پیام باشد (قبلاً ×۱۰ یعنی ریال کپی می‌شد)
+        $price_copy = function_exists('vb_cardpay_copy_amount') ? vb_cardpay_copy_amount($user['Processing_value']) : (string) (int) round((float) $user['Processing_value']);
         $textcart = strtr($textbotlang['textbot']['cart'], $replacements);
         $invoice = "{$user['Processing_value_tow']}|{$user['Processing_value_one']}";
         $dateacc = bot_date('Y/m/d H:i:s');
