@@ -623,6 +623,7 @@ try {
         payment_Status varchar(100) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
         bottype varchar(300) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL,
         message_id INT NULL,
+        remind_sent varchar(200) NULL,
         id_invoice varchar(1000) CHARACTER SET utf8mb4 COLLATE utf8mb4_unicode_ci NULL)
         ENGINE=InnoDB DEFAULT CHARSET=utf8mb4 COLLATE=utf8mb4_unicode_ci");
         if (!$result) {
@@ -631,6 +632,12 @@ try {
     } else {
         ensureTableUtf8mb4('Payment_report');
         addFieldToTable("Payment_report", "message_id", null, "INT");
+        // 5.8.5: زمان ارسال یادآوری رسید منتظر بررسی (هر رسید فقط یک بار)
+        $Check_filde = $pdo->query("SHOW COLUMNS FROM Payment_report LIKE 'remind_sent'");
+        if (($Check_filde)->rowCount() != 1) {
+            $pdo->query("ALTER TABLE Payment_report ADD remind_sent VARCHAR(200) NULL");
+            echo "The remind_sent field was added ✅";
+        }
         $Check_filde = $pdo->query("SHOW COLUMNS FROM Payment_report LIKE 'Payment_Method'");
         if (($Check_filde)->rowCount() != 1) {
             $pdo->query("ALTER TABLE Payment_report ADD Payment_Method VARCHAR(200)");

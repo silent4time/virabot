@@ -3372,3 +3372,6 @@ if (is_file(__DIR__ . '/update_channel.php')) {
 if (is_file(__DIR__ . '/nvpanel.php')) {
     require_once __DIR__ . '/nvpanel.php';
 }
+if (is_file(__DIR__ . '/card_payment.php')) {
+    require_once __DIR__ . '/card_payment.php';
+}
