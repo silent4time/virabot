@@ -6,6 +6,10 @@
  */
 declare(strict_types=1);
 
+if (is_file(__DIR__ . '/nvpanel_ovpn.php')) {
+    require_once __DIR__ . '/nvpanel_ovpn.php';
+}
+
 const NV_SYNC_TIMEOUT = 55;
 const NV_LOW_TOMAN = 1000000;
 const NV_LOW_REMIND = 43200;
@@ -448,6 +452,11 @@ function nvpanel_purchase(array $panel, string $codeProduct, string $usernameHin
         // username would miss it. Activate it here, by id, together with the real username.
         $pdo->prepare("UPDATE invoice SET username = ?, Status = 'active' WHERE id_invoice = ?")->execute([$out['username'], $invoice['id_invoice']]);
         $pdo->prepare('UPDATE nvpanel_ops SET delivered = 1 WHERE idem_key = ?')->execute([$body['ref_id']]);
+        if (function_exists('nvpanel_ovpn_queue')) {
+            // 5.8.6: personal .ovpn files go out after the credentials message of this request.
+            nvpanel_ovpn_queue((string) $body['ref_id'], 'create', (string) $invoice['id_user'], (string) $invoice['id_invoice'],
+                (string) $out['username'], (string) ($out['_nv_password'] ?? ''), $productId);
+        }
     }
     return $out;
 }
@@ -480,6 +489,7 @@ function nvpanel_renew(array $panel, string $username, string $invoiceId, string
                 'action' => 'renew',
             ]);
             if (!empty($out['_nvpanel'])) {
+                nvpanel_renew_ovpn($key, $customer, $invoiceId, $out);
                 return ['status' => true, 'msg' => 'extended', 'username' => $out['username']];
             }
             return ['status' => false, '_nvpanel_hold' => !empty($out['_nvpanel_hold']), 'msg' => (string) ($out['msg'] ?? '')];
@@ -494,9 +504,18 @@ function nvpanel_renew(array $panel, string $username, string $invoiceId, string
         'action' => 'renew',
     ]);
     if (!empty($out['_nvpanel'])) {
+        nvpanel_renew_ovpn($key, $customer, $invoiceId, $out);
         return ['status' => true, 'msg' => 'extended', 'username' => $out['username']];
     }
     return ['status' => false, '_nvpanel_hold' => !empty($out['_nvpanel_hold']), 'msg' => (string) ($out['msg'] ?? '')];
+}
+
+/** 5.8.6: queue the personal .ovpn files after a successful renew (password/product from the create op). */
+function nvpanel_renew_ovpn(string $key, $customer, string $invoiceId, array $out): void
+{
+    if (function_exists('nvpanel_ovpn_queue')) {
+        nvpanel_ovpn_queue($key, 'renew', (string) $customer, $invoiceId, (string) ($out['username'] ?? ''), (string) ($out['_nv_password'] ?? ''), '');
+    }
 }
 
 function nvpanel_data_user(array $panel, string $username): array
@@ -598,6 +617,7 @@ function nvpanel_is_panel_action_text(string $text): bool
         '🔑 ویرایش کلید API',
         '🗂 دسته پیش‌فرض پنل',
         NV_CATALOG_BTN,
+        '📄 فایل OpenVPN مشتری',
     ];
     if (function_exists('virabot_cat_btn_defcat')) {
         $labels[] = (string) virabot_cat_btn_defcat();
@@ -970,6 +990,21 @@ function nvpanel_admin_handle(): bool
     if ($hasPdo && str_starts_with($data, 'nvcat_')) {
         return nvpanel_catalog_callback($pdo, $data, $selected, $from_id, $menu);
     }
+    if ($hasPdo && function_exists('nvpanel_ovpn_admin_screen') && ($data === 'nvovpn_on' || $data === 'nvovpn_off')) {
+        $saved = nvpanel_ovpn_set_enabled($pdo, $data === 'nvovpn_on');
+        nvpanel_answer_cb($saved ? 'ذخیره شد' : 'ذخیره نشد');
+        $s = nvpanel_ovpn_admin_screen($pdo);
+        sendmessage($from_id, $s['text'], $s['kb'], 'HTML');
+        return true;
+    }
+    if ($hasPdo && function_exists('nvpanel_ovpn_admin_screen') && ($text ?? '') === NV_OVPN_BTN) {
+        if (($user['step'] ?? '') === 'nvpanel_product_map' && function_exists('step')) {
+            step('home', $from_id);
+        }
+        $s = nvpanel_ovpn_admin_screen($pdo);
+        sendmessage($from_id, $s['text'], $s['kb'], 'HTML');
+        return true;
+    }
     if (($text ?? '') === NV_CATALOG_BTN) {
         if (($user['step'] ?? '') === 'nvpanel_product_map' && function_exists('step')) {
             step('home', $from_id);
@@ -1051,6 +1086,8 @@ function nvpanel_message(string $username, string $password, string $statusText,
     }
     $lines[] = 'وضعیت پنل: ' . htmlspecialchars($statusText, ENT_QUOTES, 'UTF-8');
     $lines[] = nvpanel_expiry_text($expire, null);
-    $lines[] = 'این پنل لینک اشتراک یا فایل کانفیگ جدا نمی‌دهد.';
+    $lines[] = (function_exists('nvpanel_ovpn_enabled') && nvpanel_ovpn_enabled())
+        ? 'اگر سرویس OpenVPN باشد، فایل‌های اتصال شخصی در پیام‌های بعدی فرستاده می‌شود.'
+        : 'این پنل لینک اشتراک یا فایل کانفیگ جدا نمی‌دهد.';
     return implode("\n", $lines);
 }

@@ -269,6 +269,8 @@ timeauto_not_verify,status_keyboard_config,cron_status
         addFieldToTable("setting", "Bot_Status", "botstatuson", "VARCHAR(200)");
         addFieldToTable("setting", "roll_Status", "rolleon", "VARCHAR(200)");
         addFieldToTable("setting", "verifystart", "offverify", "VARCHAR(200)");
+        // 5.8.6: personal OpenVPN files for NV Panel buyers (off until the admin turns it on)
+        addFieldToTable("setting", "nvpanel_ovpn_files", "0", "varchar(20)");
     }
 } catch (Exception $e) {
     file_put_contents('error_log', $e->getMessage());

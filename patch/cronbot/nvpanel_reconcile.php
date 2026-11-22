@@ -38,6 +38,16 @@ foreach ($rows as $row) {
             sendmessage($uid, nvpanel_message($username, $pass, 'فعال', $res['json']['expire_at'] ?? null), null, 'HTML');
             $pdo->prepare('UPDATE invoice SET username=?, Status=? WHERE id_invoice=?')->execute([$username, 'active', $row['invoice_id']]);
             $pdo->prepare('UPDATE nvpanel_ops SET delivered=1 WHERE idem_key=?')->execute([$row['idem_key']]);
+            if (function_exists('nvpanel_ovpn_deliver') && in_array((string) $row['action'], ['create', 'renew'], true)) {
+                // 5.8.6: personal .ovpn files once per op (no-op when off or templates are missing).
+                try {
+                    $req = json_decode((string) ($row['request_json'] ?? ''), true);
+                    nvpanel_ovpn_deliver($pdo, (string) $row['idem_key'], (string) $row['action'], (string) $uid, (string) $row['invoice_id'],
+                        $username, (string) $row['action'] === 'create' ? $pass : '', (string) $row['action'] === 'create' && is_array($req) ? (string) ($req['product'] ?? '') : '');
+                } catch (Throwable $e) {
+                    error_log('nvpanel ovpn: reconcile delivery error');
+                }
+            }
         }
     }
 }
