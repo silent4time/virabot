@@ -2105,6 +2105,25 @@ do_nvpanel_setup() {
   php "$phpbin"
 }
 
+do_nvpanel_ovpn_import() {
+  if [[ ! -t 0 || ! -t 1 ]]; then
+    err "nvpanel-ovpn-import needs a real terminal."
+    return 1
+  fi
+  local phpbin="" c
+  for c in "${SCRIPT_DIR}/patch/nvpanel_ovpn_import.php" "${SCRIPT_DIR}/nvpanel_ovpn_import.php"; do
+    if [[ -f "$c" ]]; then
+      phpbin="$c"
+      break
+    fi
+  done
+  if [[ -z "$phpbin" ]]; then
+    err "nvpanel_ovpn_import.php was not found."
+    return 1
+  fi
+  php "$phpbin"
+}
+
 do_help() {
   echo ""
   echo -e "${BOLD}=== Help & Parameters ===${NC}"
@@ -2122,6 +2141,7 @@ do_help() {
   echo "    status    — System status"
   echo "    update-worker — Apply a queued update"
   echo "    nvpanel-setup — Enter an NV Panel token on this terminal"
+  echo "    nvpanel-ovpn-import — Import NV Panel OpenVPN templates (passphrase on this terminal)"
   echo "    help      — This screen"
   echo ""
   echo "  Paths:"
@@ -2481,6 +2501,7 @@ main() {
       ;;
     update-worker) do_update_worker; exit $? ;;
     nvpanel-setup) do_nvpanel_setup; exit $? ;;
+    nvpanel-ovpn-import) do_nvpanel_ovpn_import; exit $? ;;
     migrate) do_migrate "${2:-}"; exit 0 ;;
     reset)   do_reset;   exit 0 ;;
     remove|uninstall) do_remove; exit 0 ;;

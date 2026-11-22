@@ -1144,6 +1144,7 @@ $optionManualsale = json_encode([
 $option_nvpanel = json_encode([
     'keyboard' => [
         [['text' => '📋 محصولات درگاه nvpanel'], ['text' => 'شناسه محصول nvpanel']],
+        [['text' => '📄 فایل OpenVPN مشتری']],
         [['text' => $textbotlang['keyboard']['panelFeatureStatus']]],
         [['text' => $textbotlang['keyboard']['panelName']], ['text' => $textbotlang['keyboard']['deletePanel']]],
         [['text' => '🔑 ویرایش کلید API'], ['text' => $textbotlang['keyboard']['editPanelUrl']]],
